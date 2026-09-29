@@ -58,6 +58,20 @@ uvicorn app.main:app --reload
 - Readiness (DB + Supabase): http://127.0.0.1:8000/health/ready
 - Swagger: http://127.0.0.1:8000/docs
 
+Try authenticated endpoints in Swagger with a local test account (created with a pre-confirmed email):
+
+```powershell
+python -m scripts.dev_token --email you+dev@example.com --password "a-long-dev-password"
+```
+
+Open `/docs`, click **Authorize**, paste the printed token.
+
+End-to-end check against real Supabase (creates and removes throwaway users):
+
+```powershell
+python -m scripts.verify_documents_api
+```
+
 Run tests:
 
 ```powershell
@@ -74,6 +88,22 @@ npm run dev
 ```
 
 - App: http://localhost:3000
+
+## API (so far)
+
+All endpoints except health require `Authorization: Bearer <Supabase access token>`.
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/health` | Liveness |
+| GET | `/health/ready` | Database, pgvector and Storage connectivity |
+| GET | `/auth/me` | Current user from the access token |
+| POST | `/documents/upload` | Multipart `file` (PDF ≤ 20 MB), optional `title` → 201 |
+| GET | `/documents` | Current user's documents, newest first |
+| GET | `/documents/{id}` | One document (404 if missing or not yours) |
+| DELETE | `/documents/{id}` | Deletes record, chunks, conversations and the stored file → 204 |
+
+Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 413 / 415 / 422 / 502 / 500; internal details are never exposed.
 
 ## Project structure
 
