@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     supabase_service_key: SecretStr
     database_url: SecretStr
 
+    # Storage / uploads
+    storage_bucket: str = "documents"
+    max_upload_size_mb: int = 20
+    signed_url_expires_seconds: int = 3600
+
     # OpenAI — not used until the embeddings phase.
     openai_api_key: SecretStr | None = None
 
@@ -35,6 +40,10 @@ class Settings(BaseSettings):
         if not value.startswith("https://"):
             raise ValueError("SUPABASE_URL must start with https://")
         return value
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        return self.max_upload_size_mb * 1024 * 1024
 
 
 @lru_cache

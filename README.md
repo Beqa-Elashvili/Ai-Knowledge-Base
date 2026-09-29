@@ -32,7 +32,8 @@ Use the **Session pooler** string: the direct connection is IPv6-only and fails 
 ```powershell
 python -m scripts.migrate            # applies pending supabase/migrations/*.sql
 python -m scripts.migrate --status   # shows applied / pending
-python -m scripts.verify_schema      # end-to-end checks, always rolled back
+python -m scripts.verify_schema      # end-to-end DB checks, always rolled back
+python -m scripts.verify_storage     # upload/download/RLS checks on the documents bucket, cleans up after itself
 ```
 
    Alternatively, paste `supabase/migrations/0001_initial_schema.sql` into the Supabase SQL Editor.

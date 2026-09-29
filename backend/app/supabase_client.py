@@ -22,7 +22,14 @@ def get_supabase() -> Client:
     return create_client(settings.supabase_url, settings.supabase_service_key.get_secret_value())
 
 
-def check_supabase() -> dict[str, list[str]]:
-    """Connectivity check: authenticate with the service key and list buckets."""
-    buckets = get_supabase().storage.list_buckets()
-    return {"buckets": [bucket.name for bucket in buckets]}
+def check_supabase() -> dict[str, list[str] | bool]:
+    """Connectivity check: authenticate with the service key and list buckets.
+
+    Raises if the documents bucket is missing, so readiness reports an error
+    until the storage migration has been applied.
+    """
+    buckets = [bucket.name for bucket in get_supabase().storage.list_buckets()]
+    bucket_name = get_settings().storage_bucket
+    if bucket_name not in buckets:
+        raise RuntimeError(f"Storage bucket '{bucket_name}' does not exist")
+    return {"buckets": buckets, "documents_bucket": True}
