@@ -9,13 +9,14 @@ the id exists.
 import logging
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.errors import ExternalServiceError, NotFoundError
-from app.models import Document
+from app.models import Document, DocumentChunk
 from app.services import storage
+from app.services.chunking import TextChunk
 from app.services.uploads import ValidatedPdf, title_from_filename
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,18 @@ def create_document(
     user_id: uuid.UUID,
     pdf: ValidatedPdf,
     page_count: int,
+    chunks: list[TextChunk],
     title: str | None = None,
+    document_id: uuid.UUID | None = None,
 ) -> Document:
-    """Store the PDF in Supabase Storage, then create its database record.
+    """Store the PDF in Supabase Storage, then create its record and chunks.
 
-    Order matters for cleanup: if the database insert fails, the file that
-    was just uploaded is deleted, so no orphaned file or half-written record
-    is left behind.
+    The document row and all of its chunks are written in ONE transaction:
+    either everything is saved or nothing is. If that transaction fails, the
+    file that was just uploaded is deleted, so no orphaned file or
+    half-written document is left behind.
     """
-    document_id = uuid.uuid4()
+    document_id = document_id or uuid.uuid4()
     path = storage.upload_pdf(user_id, document_id, pdf.data)
 
     document = Document(
@@ -52,6 +56,21 @@ def create_document(
     )
     try:
         db.add(document)
+        db.flush()  # document row must exist before chunks reference it
+        if chunks:
+            db.execute(
+                insert(DocumentChunk),
+                [
+                    {
+                        "document_id": document_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "page_number": chunk.page_number,
+                        "page_end": chunk.page_end,
+                    }
+                    for chunk in chunks
+                ],
+            )
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -63,7 +82,10 @@ def create_document(
         raise ExternalServiceError("Could not save the document. Please try again.") from exc
 
     db.refresh(document)
-    logger.info("Created document id=%s user=%s bytes=%d", document.id, user_id, len(pdf.data))
+    logger.info(
+        "Created document id=%s user=%s bytes=%d pages=%d chunks=%d",
+        document.id, user_id, len(pdf.data), page_count, len(chunks),
+    )
     return document
 
 

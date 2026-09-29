@@ -23,3 +23,4 @@ def test_child_rows_cascade_with_parent() -> None:
     for table, fk_target in [("document_chunks", "documents"), ("conversations", "documents"), ("messages", "conversations")]:
         fks = Base.metadata.tables[table].foreign_keys
         assert any(fk.column.table.name == fk_target and fk.ondelete == "CASCADE" for fk in fks), table
+

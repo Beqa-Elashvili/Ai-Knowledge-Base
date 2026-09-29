@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.schemas import DocumentResponse, ErrorResponse
 from app.services import documents as document_service
-from app.services.pdf import extract_pages
+from app.services.ingestion import ingest_pdf
 from app.services.uploads import validate_pdf_upload
 
 router = APIRouter(
@@ -40,17 +40,13 @@ def upload_document(
     user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
-    settings = get_settings()
     pdf = validate_pdf_upload(
         filename=file.filename,
         content_type=file.content_type,
         stream=file.file,
-        max_bytes=settings.max_upload_size_bytes,
+        max_bytes=get_settings().max_upload_size_bytes,
     )
-    # Extract before storing anything: unusable PDFs are rejected up front
-    # instead of becoming a stored file with a failed status.
-    extracted = extract_pages(pdf.data, max_pages=settings.max_pdf_pages)
-    document = document_service.create_document(db, user.id, pdf, page_count=extracted.page_count, title=title)
+    document = ingest_pdf(db, user.id, pdf, title=title)
     return DocumentResponse.model_validate(document)
 
 

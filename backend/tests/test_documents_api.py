@@ -101,7 +101,7 @@ def test_malformed_document_id_returns_422(authed_client) -> None:
 
 def test_upload_rejects_non_pdf_before_storing(authed_client, monkeypatch: pytest.MonkeyPatch) -> None:
     called = []
-    monkeypatch.setattr(documents_api.document_service, "create_document", lambda *a, **k: called.append(1))
+    monkeypatch.setattr(documents_api, "ingest_pdf", lambda *a, **k: called.append(1))
     response = authed_client.post(
         "/documents/upload", files={"file": ("notes.txt", b"hello", "text/plain")}
     )

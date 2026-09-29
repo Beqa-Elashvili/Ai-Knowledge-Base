@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     max_pdf_pages: int = 2000
     signed_url_expires_seconds: int = 3600
 
+    # Chunking (characters)
+    chunk_size: int = 1600
+    chunk_overlap: int = 200
+
     # OpenAI — not used until the embeddings phase.
     openai_api_key: SecretStr | None = None
 
@@ -41,6 +45,14 @@ class Settings(BaseSettings):
         if not value.startswith("https://"):
             raise ValueError("SUPABASE_URL must start with https://")
         return value
+
+    @model_validator(mode="after")
+    def _validate_chunking(self) -> "Settings":
+        if self.chunk_size < 100:
+            raise ValueError("CHUNK_SIZE must be at least 100")
+        if not 0 <= self.chunk_overlap < self.chunk_size // 2:
+            raise ValueError("CHUNK_OVERLAP must be >= 0 and less than half of CHUNK_SIZE")
+        return self
 
     @property
     def max_upload_size_bytes(self) -> int:

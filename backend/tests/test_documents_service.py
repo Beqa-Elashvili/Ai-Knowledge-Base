@@ -18,6 +18,9 @@ class FailingSession:
     def add(self, _obj) -> None:
         pass
 
+    def flush(self) -> None:
+        pass
+
     def commit(self) -> None:
         raise OperationalError("insert", {}, Exception("db down"))
 
@@ -32,7 +35,7 @@ def test_failed_insert_removes_uploaded_file(monkeypatch: pytest.MonkeyPatch) ->
 
     db = FailingSession()
     with pytest.raises(ExternalServiceError):
-        service.create_document(db, USER, PDF, page_count=1)
+        service.create_document(db, USER, PDF, page_count=1, chunks=[])
 
     assert db.rolled_back
     assert deleted == uploaded and len(uploaded) == 1
@@ -49,4 +52,4 @@ def test_failed_upload_creates_no_record(monkeypatch: pytest.MonkeyPatch) -> Non
             raise AssertionError("record must not be created when storage fails")
 
     with pytest.raises(service.storage.StorageError):
-        service.create_document(NoWriteSession(), USER, PDF, page_count=1)
+        service.create_document(NoWriteSession(), USER, PDF, page_count=1, chunks=[])
