@@ -100,6 +100,17 @@ def test_chunks_prefer_sentence_or_paragraph_ends(book: list[PageText]) -> None:
     assert all(c.content.endswith(".") for c in chunks)
 
 
+def test_visual_line_wraps_do_not_beat_sentence_ends() -> None:
+    """PDF text wraps lines with '\\n' mid-sentence; those are not real boundaries."""
+    import textwrap
+
+    prose = " ".join(f"Sentence {i} discusses gradient descent and how networks update weights." for i in range(40))
+    wrapped = textwrap.fill(prose, width=70)  # '\n' roughly every 70 chars, mid-sentence
+    chunks = chunk_pages([PageText(1, wrapped)], SMALL)
+    assert len(chunks) > 3
+    assert all(c.content.endswith(".") for c in chunks), [c.content[-30:] for c in chunks if not c.content.endswith(".")]
+
+
 def test_chunks_never_start_mid_word(book: list[PageText]) -> None:
     text = _PageMap(book).text
     assert all(c.start_char == 0 or text[c.start_char - 1].isspace() for c in chunk_pages(book, SMALL))

@@ -102,6 +102,23 @@ def main() -> int:
         with get_engine().connect() as conn:
             row = conn.execute(text("select user_id::text, storage_path from documents where id = :id"), {"id": doc_id}).one()
         c.check("DB row owned by user A", row[0] == users["a"] and row[1] == f"{users['a']}/{doc_id}.pdf")
+        with get_engine().connect() as conn:
+            chunk_rows = conn.execute(
+                text(
+                    "select chunk_index, page_number, page_end, content, embedding is null "
+                    "from document_chunks where document_id = :id order by chunk_index"
+                ),
+                {"id": doc_id},
+            ).all()
+        c.check("chunks saved with the document", len(chunk_rows) >= 1, f"{len(chunk_rows)} chunk(s)")
+        c.check("chunk indexes are 0..n-1", [r[0] for r in chunk_rows] == list(range(len(chunk_rows))))
+        c.check(
+            "chunk page range covers pages 1-3 of the PDF",
+            (chunk_rows[0][1], chunk_rows[-1][2]) == (1, 3) and all(1 <= r[1] <= r[2] <= 3 for r in chunk_rows),
+            [(r[1], r[2]) for r in chunk_rows],
+        )
+        c.check("chunk text comes from the PDF", "page 2" in " ".join(r[3] for r in chunk_rows))
+        c.check("embeddings not generated yet (Phase 8)", all(r[4] for r in chunk_rows))
 
         r = client.post(
             "/documents/upload",
@@ -124,6 +141,11 @@ def main() -> int:
         print("\nDelete:")
         c.check("user A DELETE -> 204", client.delete(f"/documents/{doc_id}", headers=auth["a"]).status_code == 204)
         c.check("deleted document -> 404", client.get(f"/documents/{doc_id}", headers=auth["a"]).status_code == 404)
+        with get_engine().connect() as conn:
+            left_chunks = conn.execute(
+                text("select count(*) from document_chunks where document_id = :id"), {"id": doc_id}
+            ).scalar_one()
+        c.check("its chunks were deleted (cascade)", left_chunks == 0)
         c.check("stored file removed", stored_files(users["a"]) == [f"{second_id}.pdf"], stored_files(users["a"]))
         c.check("second delete -> 404", client.delete(f"/documents/{doc_id}", headers=auth["a"]).status_code == 404)
     finally:

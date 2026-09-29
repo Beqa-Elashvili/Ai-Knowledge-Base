@@ -25,13 +25,14 @@ logger = logging.getLogger(__name__)
 PAGE_SEPARATOR = "\n\n"  # also acts as a paragraph boundary between pages
 
 # Preferred split points, strongest first. Each pattern matches the gap
-# *after* which a chunk may end.
+# *after* which a chunk may end. A single '\n' is deliberately NOT a boundary
+# of its own: in PDF text it is usually just a visual line wrap in the middle
+# of a sentence, so it only counts as ordinary whitespace.
 _BOUNDARIES = [
-    re.compile(r"\n\s*\n"),          # paragraph / page break
-    re.compile(r"\n"),               # line break
+    re.compile(r"\n\s*\n"),            # paragraph / page break
     re.compile(r"[.!?…][\"')\]]*\s"),  # end of sentence
-    re.compile(r"[;:,]\s"),          # clause
-    re.compile(r"\s"),               # any word boundary
+    re.compile(r"[;:,]\s"),            # clause
+    re.compile(r"\s"),                 # any word boundary (incl. line wraps)
 ]
 
 
