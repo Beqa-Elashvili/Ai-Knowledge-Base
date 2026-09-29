@@ -33,10 +33,13 @@ class Checker:
             self.failures += 1
 
 
-def make_pdf() -> bytes:
+def make_pdf(pages: int = 1, text_on_pages: bool = True, **save_kwargs) -> bytes:
     doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), "Verification document")
-    data = doc.tobytes()
+    for number in range(1, pages + 1):
+        page = doc.new_page()
+        if text_on_pages:
+            page.insert_text((72, 72), f"Verification document, page {number}")
+    data = doc.tobytes(**save_kwargs)
     doc.close()
     return data
 
@@ -65,13 +68,17 @@ def main() -> int:
         c.check("/auth/me returns the token's user", me.status_code == 200 and me.json()["id"] == users["a"])
 
         print("\nUpload validation:")
-        pdf = make_pdf()
+        pdf = make_pdf(pages=3)
+        encrypted = make_pdf(encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw="u", owner_pw="o")
         cases = [
             ("wrong extension", ("notes.txt", pdf, "application/pdf"), 415),
             ("wrong MIME type", ("notes.pdf", pdf, "text/plain"), 415),
             ("renamed text file", ("fake.pdf", b"not really a pdf", "application/pdf"), 415),
             ("empty file", ("empty.pdf", b"", "application/pdf"), 400),
             ("over 20 MB", ("big.pdf", b"%PDF-1.7\n" + b"0" * get_settings().max_upload_size_bytes, "application/pdf"), 413),
+            ("damaged PDF", ("broken.pdf", b"%PDF-1.7 garbage garbage", "application/pdf"), 422),
+            ("password-protected PDF", ("locked.pdf", encrypted, "application/pdf"), 422),
+            ("scanned PDF without text", ("scan.pdf", make_pdf(pages=2, text_on_pages=False), "application/pdf"), 422),
         ]
         for label, file_tuple, expected in cases:
             r = client.post("/documents/upload", files={"file": file_tuple}, headers=auth["a"])
@@ -89,6 +96,7 @@ def main() -> int:
         doc_id = doc["id"]
         c.check("title derived from filename", doc["title"] == "Machine Learning Fundamentals", doc["title"])
         c.check("status is processing", doc["status"] == "processing")
+        c.check("page_count from extraction", doc["page_count"] == 3, doc["page_count"])
         c.check("storage_path not exposed", "storage_path" not in doc)
         c.check("file stored at {user_id}/{document_id}.pdf", stored_files(users["a"]) == [f"{doc_id}.pdf"])
         with get_engine().connect() as conn:

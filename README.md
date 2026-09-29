@@ -98,12 +98,12 @@ All endpoints except health require `Authorization: Bearer <Supabase access toke
 | GET | `/health` | Liveness |
 | GET | `/health/ready` | Database, pgvector and Storage connectivity |
 | GET | `/auth/me` | Current user from the access token |
-| POST | `/documents/upload` | Multipart `file` (PDF ≤ 20 MB), optional `title` → 201 |
+| POST | `/documents/upload` | Multipart `file` (PDF ≤ 20 MB, ≤ 2000 pages, with a text layer), optional `title` → 201 |
 | GET | `/documents` | Current user's documents, newest first |
 | GET | `/documents/{id}` | One document (404 if missing or not yours) |
 | DELETE | `/documents/{id}` | Deletes record, chunks, conversations and the stored file → 204 |
 
-Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 413 / 415 / 422 / 502 / 500; internal details are never exposed.
+Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 413 / 415 / 422 (also damaged, password-protected or scanned PDFs) / 502 / 500; internal details are never exposed.
 
 ## Project structure
 
