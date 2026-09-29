@@ -25,7 +25,13 @@ class DocumentNotFoundError(NotFoundError):
     default_message = "Document not found."
 
 
-def create_document(db: Session, user_id: uuid.UUID, pdf: ValidatedPdf, title: str | None = None) -> Document:
+def create_document(
+    db: Session,
+    user_id: uuid.UUID,
+    pdf: ValidatedPdf,
+    page_count: int,
+    title: str | None = None,
+) -> Document:
     """Store the PDF in Supabase Storage, then create its database record.
 
     Order matters for cleanup: if the database insert fails, the file that
@@ -41,6 +47,7 @@ def create_document(db: Session, user_id: uuid.UUID, pdf: ValidatedPdf, title: s
         title=(title or "").strip()[:200] or title_from_filename(pdf.filename),
         filename=pdf.filename,
         storage_path=path,
+        page_count=page_count,
         status="processing",
     )
     try:

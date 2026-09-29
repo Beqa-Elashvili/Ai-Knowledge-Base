@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Storage / uploads
     storage_bucket: str = "documents"
     max_upload_size_mb: int = 20
+    max_pdf_pages: int = 2000
     signed_url_expires_seconds: int = 3600
 
     # OpenAI — not used until the embeddings phase.
