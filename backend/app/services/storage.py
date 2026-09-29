@@ -11,6 +11,7 @@ import uuid
 from storage3.exceptions import StorageApiError
 
 from app.config import get_settings
+from app.errors import ExternalServiceError
 from app.supabase_client import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 PDF_CONTENT_TYPE = "application/pdf"
 
 
-class StorageError(Exception):
+class StorageError(ExternalServiceError):
     """A storage operation failed. The message is safe to show to users."""
 
 

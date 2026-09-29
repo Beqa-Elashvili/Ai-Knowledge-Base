@@ -9,8 +9,9 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health
+from app.api import auth, documents, health
 from app.config import get_settings
+from app.errors import register_exception_handlers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,7 +37,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_exception_handlers(app)
+
     app.include_router(health.router)
+    app.include_router(auth.router)
+    app.include_router(documents.router)
 
     logger.info("%s started (env=%s)", settings.app_name, settings.environment)
     return app
