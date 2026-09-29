@@ -1,0 +1,26 @@
+# Web framework
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+
+# Settings & validation
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# Database (Supabase PostgreSQL + pgvector)
+SQLAlchemy==2.1.1
+psycopg[binary]==3.3.6
+pgvector==0.5.0
+
+# Supabase (Storage, Auth verification, RPC)
+supabase==2.31.0
+
+# PDF processing
+pymupdf==1.28.2
+
+# LLM & embeddings
+openai==3.20.0
+
+# HTTP / testing
+httpx==0.28.1
+pytest==9.1.1
