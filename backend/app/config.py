@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,14 +19,24 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # External services. Optional until the phases that use them are built;
-    # secrets are SecretStr so they never appear in logs or reprs.
-    supabase_url: str | None = None
-    supabase_service_key: SecretStr | None = None
-    database_url: SecretStr | None = None
+    # Supabase (backend-only). Secrets are SecretStr so they never appear
+    # in logs, reprs or error messages.
+    supabase_url: str
+    supabase_service_key: SecretStr
+    database_url: SecretStr
+
+    # OpenAI — not used until the embeddings phase.
     openai_api_key: SecretStr | None = None
+
+    @field_validator("supabase_url")
+    @classmethod
+    def _validate_supabase_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if not value.startswith("https://"):
+            raise ValueError("SUPABASE_URL must start with https://")
+        return value
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # values come from the environment
