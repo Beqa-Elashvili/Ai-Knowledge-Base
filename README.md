@@ -27,7 +27,17 @@ Upload your own PDFs and chat with them through a real Retrieval-Augmented Gener
 
 Use the **Session pooler** string: the direct connection is IPv6-only and fails on many networks. Replace the `postgresql://` prefix with `postgresql+psycopg://`. The backend tolerates special characters in the password, but a letters-and-digits password avoids URL escaping issues entirely.
 
-3. Verify connectivity with the backend running: `GET http://127.0.0.1:8000/health/ready` should return `"status": "ok"` for both `database` and `supabase`.
+3. Apply the database schema (pgvector, tables, vector search RPC, RLS) from `backend/` with the venv active:
+
+```powershell
+python -m scripts.migrate            # applies pending supabase/migrations/*.sql
+python -m scripts.migrate --status   # shows applied / pending
+python -m scripts.verify_schema      # end-to-end checks, always rolled back
+```
+
+   Alternatively, paste `supabase/migrations/0001_initial_schema.sql` into the Supabase SQL Editor.
+
+4. Verify connectivity with the backend running: `GET http://127.0.0.1:8000/health/ready` should return `"status": "ok"` for both `database` and `supabase`.
 
 ## Local setup (Windows / PowerShell)
 
