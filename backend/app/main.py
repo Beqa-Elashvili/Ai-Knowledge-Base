@@ -22,11 +22,16 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # Interactive docs are for development; production does not advertise the API.
+    show_docs = settings.environment != "production"
 
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
         description="Retrieval-Augmented Generation over your own documents.",
+        docs_url="/docs" if show_docs else None,
+        redoc_url="/redoc" if show_docs else None,
+        openapi_url="/openapi.json" if show_docs else None,
     )
 
     # Added first so it ends up inside CORSMiddleware: 500s keep CORS headers.

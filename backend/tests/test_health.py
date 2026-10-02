@@ -22,6 +22,22 @@ def test_docs_available() -> None:
     assert client.get("/openapi.json").status_code == 200
 
 
+def test_docs_hidden_in_production(monkeypatch) -> None:
+    from app.config import get_settings
+    from app.main import create_app
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    get_settings.cache_clear()
+    try:
+        production = TestClient(create_app())
+        assert production.get("/docs").status_code == 404
+        assert production.get("/openapi.json").status_code == 404
+        assert production.get("/health").status_code == 200
+    finally:
+        monkeypatch.delenv("ENVIRONMENT")
+        get_settings.cache_clear()
+
+
 def test_readiness_ok(monkeypatch) -> None:
     monkeypatch.setattr("app.api.health.check_database", lambda: {"pgvector_available": True})
     monkeypatch.setattr("app.api.health.check_supabase", lambda: {"buckets": []})
