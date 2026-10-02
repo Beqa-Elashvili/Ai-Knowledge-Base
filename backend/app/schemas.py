@@ -93,3 +93,9 @@ class AskResponse(BaseModel):
     answer: str
     sources: list[SourceResponse]
     model: str
+
+
+class ChatRequest(BaseModel):
+    document_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None
+    message: Question

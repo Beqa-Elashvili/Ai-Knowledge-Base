@@ -113,6 +113,21 @@ python -m scripts.reembed --all    # every chunk
 
 Sources are never taken from the model alone: a page is listed only if the answer cites it **and** a retrieved excerpt covers it, deduplicated, in page order. Chunks that cross pages store where each page begins (`page_breaks`), and the prompt marks it (`[Page 15 begins here]`), so citations name the exact page rather than a range. An answer that cites nothing ("not found in the document") has no sources.
 
+## Streaming chat
+
+`POST /chat` answers with `text/event-stream`:
+
+```
+event: meta    data: {"conversation_id": "...", "user_message_id": 41}
+event: token   data: {"text": "The French Revolution began "}     (many)
+event: done    data: {"message_id": 42, "sources": [{"page": 2, "similarity": 0.73}]}
+event: error   data: {"detail": "...", "message_id": 42}           (instead of done)
+```
+
+- Ownership, search and the model's first text happen **before** the stream starts, so those failures are normal HTTP errors (404 / 409 / 502) and save nothing.
+- Without `conversation_id` a new conversation is created, titled from the question. A conversation belongs to one user and one document.
+- When the stream ends, the answer and its sources are saved. If the model fails mid-answer or the client disconnects (closed tab, Stop), generation stops and the text produced so far is saved ending with `[Answer interrupted]`.
+
 ## API (so far)
 
 All endpoints except health require `Authorization: Bearer <Supabase access token>`.
@@ -126,6 +141,7 @@ All endpoints except health require `Authorization: Bearer <Supabase access toke
 | GET | `/documents` | Current user's documents, newest first |
 | GET | `/documents/{id}` | One document (404 if missing or not yours) |
 | DELETE | `/documents/{id}` | Deletes record, chunks, conversations and the stored file → 204 |
+| POST | `/chat` | `{"document_id", "conversation_id"?, "message"}` → answer streamed as Server-Sent Events (see below); saved to the conversation |
 | POST | `/documents/{id}/ask` | `{"question": "..."}` → answer from the document only, with `sources` `[{"page": 14, "similarity": 0.89}]` (waits for the full answer; not saved) |
 | POST | `/documents/{id}/search` | `{"question": "...", "top_k": 5}` → chunks of that document most similar to the question, best first, with pages and similarity (retrieval only, no LLM) |
 

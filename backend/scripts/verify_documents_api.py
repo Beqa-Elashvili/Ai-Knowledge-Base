@@ -8,6 +8,7 @@ Usage (from backend/, venv active):
     python -m scripts.verify_documents_api
 """
 
+import json
 import secrets
 import sys
 import uuid
@@ -211,6 +212,40 @@ def main() -> int:
         code, body = ask("Who won the 2018 FIFA World Cup?")
         c.check("question not covered by the document -> no sources", code == 200 and body["sources"] == [], (body.get("answer", "")[:80], body["sources"]))
         c.check("user B asking about A's document -> 404", ask("When?", who="b")[0] == 404)
+
+        print("\nStreaming chat:")
+
+        def chat(message: str, who: str = "a", **extra):
+            r = client.post("/chat", json={"document_id": topics_id, "message": message, **extra}, headers=auth[who])
+            if r.status_code != 200:
+                return r.status_code, []
+            blocks = [dict(line.split(": ", 1) for line in b.split("\n")) for b in r.text.strip().split("\n\n")]
+            return r.status_code, [(b["event"], json.loads(b["data"])) for b in blocks]
+
+        code, events = chat("When did the French Revolution begin?")
+        names = [name for name, _ in events]
+        c.check("events: meta, token..., done", code == 200 and names[0] == "meta" and names[-1] == "done" and "token" in names, names[:3] + ["..."] + names[-1:])
+        answer = "".join(data["text"] for name, data in events if name == "token")
+        conv_id = events[0][1]["conversation_id"] if events else None
+        c.check("streamed answer is grounded", "1789" in answer, answer[:80])
+        c.check("done carries page 2 as source", events and [s["page"] for s in events[-1][1]["sources"]] == [2], events[-1][1] if events else None)
+        with get_engine().connect() as conn:
+            rows = conn.execute(
+                text("select m.role, m.content, m.sources, cv.title, cv.user_id::text, cv.document_id::text "
+                     "from messages m join conversations cv on cv.id = m.conversation_id "
+                     "where cv.id = :id order by m.id"), {"id": conv_id}).all()
+        c.check("conversation saved for user A and this document", bool(rows) and rows[0][4] == users["a"] and rows[0][5] == topics_id)
+        c.check("conversation titled from the first question", bool(rows) and rows[0][3] == "When did the French Revolution begin?")
+        c.check("user + assistant messages saved", [r[0] for r in rows] == ["user", "assistant"])
+        c.check("saved answer == streamed answer, with sources", len(rows) == 2 and rows[1][1] == answer and rows[1][2] == events[-1][1]["sources"])
+        code, events = chat("And what about photosynthesis?", conversation_id=conv_id)
+        with get_engine().connect() as conn:
+            count = conn.execute(text("select count(*) from messages where conversation_id = :id"), {"id": conv_id}).scalar_one()
+        c.check("follow-up continues the same conversation", code == 200 and events[0][1]["conversation_id"] == conv_id and count == 4)
+        c.check("user B using A's conversation -> 404", chat("q", who="b", conversation_id=conv_id)[0] == 404)
+        r = client.post("/chat", json={"document_id": doc_id, "conversation_id": conv_id, "message": "q"}, headers=auth["a"])
+        c.check("conversation used with another document -> 404", r.status_code == 404)
+        c.check("unknown conversation -> 404", chat("q", conversation_id=str(uuid.uuid4()))[0] == 404)
         client.delete(f"/documents/{topics_id}", headers=auth["a"])
 
         print("\nDelete:")
