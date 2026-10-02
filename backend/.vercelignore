@@ -1,0 +1,15 @@
+# Never upload secrets or local environments to Vercel.
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+scripts/
+Dockerfile
+.dockerignore
+# Vercel runs Python 3.12 and has no 3.11 (Docker/Render use .python-version)
+.python-version

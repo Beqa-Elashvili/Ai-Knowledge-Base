@@ -1,0 +1,8 @@
+# Never upload local env files; Vercel injects its own variables.
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+e2e/
+*.tsbuildinfo

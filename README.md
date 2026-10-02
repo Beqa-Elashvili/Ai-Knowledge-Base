@@ -378,6 +378,22 @@ A 12-page travel guide is uploaded; page 4 says *"The Enguri Dam is 271 metres h
 
 The two halves deploy separately: the frontend to a Node host such as **Vercel**, and the backend to any container or Python host such as **Render**, **Railway**, **Fly.io** or **Cloud Run**. The database, storage and auth stay on Supabase.
 
+### Current deployment (Vercel)
+
+Both halves run on Vercel as two projects (database, storage and auth stay on Supabase):
+
+| Project | Root directory | URL |
+| --- | --- | --- |
+| `ai-knowledge-base` (Next.js) | `frontend` | https://ai-knowledge-base-gamma-wine.vercel.app |
+| `ai-knowledge-base-api` (FastAPI) | `backend` | https://ai-knowledge-base-api-kappa.vercel.app |
+
+- The backend runs as one Python function: `backend/api/index.py` imports the app, and `backend/vercel.json` routes every path to it with `maxDuration: 300`. Vercel uses Python 3.12, and `.python-version` is excluded by `.vercelignore`.
+- Vercel limits a request body to 4.5 MB, so production uses `MAX_UPLOAD_SIZE_MB=4` and `NEXT_PUBLIC_MAX_UPLOAD_MB=4`. An upload must also finish embedding within 300 s (about 200 pages on the Gemini free tier). For larger PDFs, deploy the backend with the Dockerfile instead.
+- `.vercelignore` files keep `.env*`, `venv/`, tests and scripts out of every upload. Environment variables are set in each Vercel project (`vercel env add NAME production`).
+- To redeploy, run `npx vercel deploy --prod` in `backend/` or `frontend/`. After changing a `NEXT_PUBLIC_*` value, redeploy the frontend, because those values are built in.
+
+The rest of this section applies to any host.
+
 ### Backend
 
 `backend/Dockerfile` builds a slim production image (runtime dependencies only, non-root user). It listens on `$PORT` (default 8000) and trusts the platform's proxy headers.
