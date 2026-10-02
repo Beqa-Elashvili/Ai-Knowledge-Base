@@ -62,7 +62,9 @@ def _get_client() -> httpx.Client:
     return _client
 
 
-def build_request(system: str, messages: list[ChatMessage]) -> dict:
+def build_request(system: str, messages: list[ChatMessage], response_schema: dict | None = None) -> dict:
+    """Gemini request body. With `response_schema` (OpenAPI-style), the model
+    must reply with JSON matching it."""
     settings = get_settings()
     generation_config: dict = {
         "temperature": settings.llm_temperature,
@@ -70,6 +72,9 @@ def build_request(system: str, messages: list[ChatMessage]) -> dict:
     }
     if settings.llm_thinking_level:
         generation_config["thinkingConfig"] = {"thinkingLevel": settings.llm_thinking_level}
+    if response_schema is not None:
+        generation_config["responseMimeType"] = "application/json"
+        generation_config["responseSchema"] = response_schema
     return {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": _GEMINI_ROLES[m.role], "parts": [{"text": m.content}]} for m in messages],
@@ -77,10 +82,10 @@ def build_request(system: str, messages: list[ChatMessage]) -> dict:
     }
 
 
-def generate(system: str, messages: list[ChatMessage]) -> LLMResult:
+def generate(system: str, messages: list[ChatMessage], response_schema: dict | None = None) -> LLMResult:
     model = get_settings().llm_model
     client = _get_client()
-    body = build_request(system, messages)
+    body = build_request(system, messages, response_schema)
     started = time.perf_counter()
     try:
         data = gemini.with_retry(

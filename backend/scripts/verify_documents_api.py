@@ -267,6 +267,29 @@ def main() -> int:
         c.check("user B summarizing A's document -> 404",
                 client.post(f"/documents/{topics_id}/summary", headers=auth["b"]).status_code == 404)
 
+        print("\nSuggested questions:")
+        r = client.post(f"/documents/{topics_id}/questions", headers=auth["a"])
+        suggested = (r.json().get("questions") or []) if r.status_code == 200 else []
+        c.check("6 questions generated", r.status_code == 200 and len(suggested) == 6, suggested)
+        joined = " ".join(suggested).lower()
+        c.check("questions are about this document's topics",
+                "photosynth" in joined and ("revolution" in joined or "bastille" in joined or "1789" in joined) and ("neural" in joined or "backprop" in joined))
+        c.check("questions stored on the document",
+                client.get(f"/documents/{topics_id}", headers=auth["a"]).json().get("questions") == suggested)
+        answered = []
+        for question in suggested:
+            code, body = ask(question)
+            answered.append(code == 200 and bool(body["sources"]))
+            if not answered[-1]:
+                print(f"     unanswered: {question!r} -> {body.get('answer', '')[:160]!r}")
+        c.check("every question is answered from the document (with sources)", all(answered), f"{sum(answered)}/{len(answered)}")
+        r = client.post(f"/documents/{topics_id}/questions", json={"language": "Georgian"}, headers=auth["a"])
+        georgian_q = (r.json().get("questions") or []) if r.status_code == 200 else []
+        c.check("questions in Georgian on request",
+                bool(georgian_q) and all(any("ა" <= ch <= "ჿ" for ch in q) for q in georgian_q), georgian_q[:2])
+        c.check("user B generating questions on A's document -> 404",
+                client.post(f"/documents/{topics_id}/questions", headers=auth["b"]).status_code == 404)
+
         print("\nConversations API:")
         listing = client.get(f"/conversations?document_id={topics_id}", headers=auth["a"]).json()
         c.check("list shows the conversation", [x["id"] for x in listing] == [conv_id], listing)

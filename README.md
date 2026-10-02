@@ -132,6 +132,10 @@ event: error   data: {"detail": "...", "message_id": 42}           (instead of d
 
 `services/summaries.py` never sends a whole PDF to the model. Chunks are grouped, in reading order, into sections of up to `SUMMARY_SECTION_CHARS` (60,000). A document that fits in one section is summarized in one call; longer ones are map-reduced: notes per section → notes condensed again while they exceed one section → final summary (overview, key points, conclusion) from notes covering the whole document. Stored in `documents.summary`. Written in the document's language unless `language` is given (validated: letters, spaces, hyphens, parentheses).
 
+## Suggested questions
+
+`services/questions.py` builds questions from the stored summary (if any) plus excerpts sampled evenly from the first to the last page within `QUESTIONS_SOURCE_CHARS` (30,000), so they cover the whole document. Gemini answers in JSON mode against a schema (`{"questions": [...]}`); the prompt requires questions specific to this document (its actual concepts, events, findings), open-ended and varied in scope. Results are cleaned (numbering removed, `?` ensured, length limits, case-insensitive dedup) and stored in `documents.questions`. Written in the language of the document's text unless `language` is given. In the live check every generated question is answered by `/ask` with sources from the document.
+
 ## Conversation memory
 
 Each chat turn sends the last `CHAT_HISTORY_MESSAGES` (6) messages of the conversation to the model, each capped at `CHAT_HISTORY_MESSAGE_CHARS`, so follow-ups like "whose rule did it end?" are understood. Because such a follow-up is a poor search query on its own, it is first rewritten by the model into a standalone question ("Whose rule did the French Revolution end?") and **that** is used for vector search; the question is still saved and answered as asked. If the rewrite fails, the original question is searched. The first question of a conversation is never rewritten.
@@ -155,6 +159,7 @@ All endpoints except health require `Authorization: Bearer <Supabase access toke
 | DELETE | `/conversations/{id}` | Deletes the conversation and its messages → 204 |
 | POST | `/chat` | `{"document_id", "conversation_id"?, "message"}` → answer streamed as Server-Sent Events (see below); saved to the conversation |
 | POST | `/documents/{id}/summary` | Optional `{"language": "Georgian"}` → generates and stores the summary; returns the document |
+| POST | `/documents/{id}/questions` | Optional `{"language": "Georgian"}` → generates and stores `QUESTIONS_COUNT` (6) suggested questions; returns the document |
 | POST | `/documents/{id}/ask` | `{"question": "..."}` → answer from the document only, with `sources` `[{"page": 14, "similarity": 0.89}]` (waits for the full answer; not saved) |
 | POST | `/documents/{id}/search` | `{"question": "...", "top_k": 5}` → chunks of that document most similar to the question, best first, with pages and similarity (retrieval only, no LLM) |
 

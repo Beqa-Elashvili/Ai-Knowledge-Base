@@ -20,6 +20,7 @@ from app.schemas import (
 )
 from app.services import documents as document_service
 from app.services.ingestion import ingest_pdf
+from app.services.questions import generate_questions
 from app.services.rag import answer_question
 from app.services.summaries import summarize_document
 from app.services.uploads import validate_pdf_upload
@@ -154,3 +155,25 @@ def generate_summary(
     documents take longer: they are summarized part by part."""
     language = body.language if body else None
     return DocumentResponse.model_validate(summarize_document(db, user.id, document_id, language))
+
+
+@router.post(
+    "/{document_id}/questions",
+    response_model=DocumentResponse,
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "Document is not processed yet"},
+        502: {"model": ErrorResponse, "description": "AI model or database failure"},
+    },
+)
+def suggest_questions(
+    document_id: uuid.UUID,
+    body: GenerateRequest | None = None,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
+    """Generate (or regenerate) questions specific to this document, from
+    its summary (if any) and excerpts spread across it, and store them.
+    Returns the document with `questions` filled in."""
+    language = body.language if body else None
+    return DocumentResponse.model_validate(generate_questions(db, user.id, document_id, language))

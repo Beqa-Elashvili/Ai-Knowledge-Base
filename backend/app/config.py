@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # Summaries: max characters of document text (or notes) per LLM request.
     summary_section_chars: int = Field(default=60000, ge=2000)
 
+    # Suggested questions: how many, and max characters of document text
+    # (summary + evenly spread excerpts) they are generated from.
+    questions_count: int = Field(default=6, ge=1, le=15)
+    questions_source_chars: int = Field(default=30000, ge=2000)
+
     # Chat memory: earlier messages sent with each question, and the cap on
     # each one's length.
     chat_history_messages: int = Field(default=6, ge=0, le=50)
