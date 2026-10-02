@@ -1,9 +1,15 @@
 """Application configuration loaded from environment variables / .env."""
 
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_EMBEDDING_MODELS = {
+    "gemini": "gemini-embedding-2",
+    "openai": "text-embedding-3-small",
+}
 
 
 class Settings(BaseSettings):
@@ -35,7 +41,13 @@ class Settings(BaseSettings):
     chunk_size: int = 1600
     chunk_overlap: int = 200
 
-    # OpenAI — not used until the embeddings phase.
+    # Embeddings. EMBEDDING_MODEL empty = the provider's default model.
+    embedding_provider: Literal["gemini", "openai"] = "gemini"
+    embedding_model: str = ""
+    embedding_batch_size: int = Field(default=100, ge=1)
+
+    # AI provider keys
+    gemini_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
 
     @field_validator("supabase_url")
@@ -57,6 +69,15 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def resolved_embedding_model(self) -> str:
+        return self.embedding_model.strip() or DEFAULT_EMBEDDING_MODELS[self.embedding_provider]
+
+    @property
+    def embedding_api_key(self) -> SecretStr | None:
+        key = self.gemini_api_key if self.embedding_provider == "gemini" else self.openai_api_key
+        return key if key and key.get_secret_value().strip() else None
 
 
 @lru_cache

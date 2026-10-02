@@ -32,16 +32,22 @@ def create_document(
     pdf: ValidatedPdf,
     page_count: int,
     chunks: list[TextChunk],
+    embeddings: list[list[float]],
     title: str | None = None,
     document_id: uuid.UUID | None = None,
 ) -> Document:
     """Store the PDF in Supabase Storage, then create its record and chunks.
+
+    `embeddings[i]` is the vector of `chunks[i]`; with every chunk embedded
+    the document is saved as "ready".
 
     The document row and all of its chunks are written in ONE transaction:
     either everything is saved or nothing is. If that transaction fails, the
     file that was just uploaded is deleted, so no orphaned file or
     half-written document is left behind.
     """
+    if len(embeddings) != len(chunks):
+        raise ValueError(f"{len(chunks)} chunks but {len(embeddings)} embeddings")
     document_id = document_id or uuid.uuid4()
     path = storage.upload_pdf(user_id, document_id, pdf.data)
 
@@ -52,7 +58,7 @@ def create_document(
         filename=pdf.filename,
         storage_path=path,
         page_count=page_count,
-        status="processing",
+        status="ready",
     )
     try:
         db.add(document)
@@ -67,8 +73,9 @@ def create_document(
                         "content": chunk.content,
                         "page_number": chunk.page_number,
                         "page_end": chunk.page_end,
+                        "embedding": embedding,
                     }
-                    for chunk in chunks
+                    for chunk, embedding in zip(chunks, embeddings, strict=True)
                 ],
             )
         db.commit()

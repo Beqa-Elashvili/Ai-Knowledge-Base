@@ -95,7 +95,7 @@ def main() -> int:
         doc = r.json()
         doc_id = doc["id"]
         c.check("title derived from filename", doc["title"] == "Machine Learning Fundamentals", doc["title"])
-        c.check("status is processing", doc["status"] == "processing")
+        c.check("status is ready", doc["status"] == "ready", doc["status"])
         c.check("page_count from extraction", doc["page_count"] == 3, doc["page_count"])
         c.check("storage_path not exposed", "storage_path" not in doc)
         c.check("file stored at {user_id}/{document_id}.pdf", stored_files(users["a"]) == [f"{doc_id}.pdf"])
@@ -105,7 +105,7 @@ def main() -> int:
         with get_engine().connect() as conn:
             chunk_rows = conn.execute(
                 text(
-                    "select chunk_index, page_number, page_end, content, embedding is null "
+                    "select chunk_index, page_number, page_end, content, vector_dims(embedding), vector_norm(embedding) "
                     "from document_chunks where document_id = :id order by chunk_index"
                 ),
                 {"id": doc_id},
@@ -118,7 +118,8 @@ def main() -> int:
             [(r[1], r[2]) for r in chunk_rows],
         )
         c.check("chunk text comes from the PDF", "page 2" in " ".join(r[3] for r in chunk_rows))
-        c.check("embeddings not generated yet (Phase 8)", all(r[4] for r in chunk_rows))
+        c.check("every chunk has a 1536-d embedding", all(r[4] == 1536 for r in chunk_rows), [r[4] for r in chunk_rows])
+        c.check("embeddings are normalized", all(abs(r[5] - 1) < 1e-3 for r in chunk_rows), [round(r[5], 4) for r in chunk_rows])
 
         r = client.post(
             "/documents/upload",

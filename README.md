@@ -11,7 +11,7 @@ Upload your own PDFs and chat with them through a real Retrieval-Augmented Gener
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Lucide |
 | Backend  | Python 3.11, FastAPI, Pydantic, SQLAlchemy, PyMuPDF      |
 | Data     | Supabase PostgreSQL + pgvector, Supabase Storage, Supabase Auth |
-| AI       | OpenAI `text-embedding-3-small` (1536-d) + streaming chat model |
+| AI       | Embeddings (1536-d): Google Gemini `gemini-embedding-2` (default, free tier) or OpenAI `text-embedding-3-small`; streaming chat model |
 
 ## Supabase setup
 
@@ -88,6 +88,20 @@ npm run dev
 ```
 
 - App: http://localhost:3000
+
+## Embeddings
+
+Every chunk is embedded during upload, before anything is stored, so a failed embedding leaves no file or record behind; a successful upload is saved with status `ready`.
+
+- Provider: `EMBEDDING_PROVIDER=gemini` (key from https://aistudio.google.com/apikey → `GEMINI_API_KEY`) or `openai` (`OPENAI_API_KEY`). `EMBEDDING_MODEL` overrides the provider's default model.
+- Vectors are requested at 1536 dimensions and L2-normalized, matching `vector(1536)` and cosine search.
+- Rate limits (429) and 5xx errors are retried with backoff, honouring the provider's retry delay. On the Gemini free tier, roughly 100 chunks per minute are embedded, so a 100-page PDF (~200 chunks) takes about 2 minutes to upload.
+- Vectors from different providers/models are not comparable. After switching, re-embed stored chunks (from `backend/`):
+
+```powershell
+python -m scripts.reembed          # only chunks without an embedding
+python -m scripts.reembed --all    # every chunk
+```
 
 ## API (so far)
 
