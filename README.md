@@ -38,7 +38,9 @@ python -m scripts.verify_storage     # upload/download/RLS checks on the documen
 
    Alternatively, paste `supabase/migrations/0001_initial_schema.sql` into the Supabase SQL Editor.
 
-4. Verify connectivity with the backend running: `GET http://127.0.0.1:8000/health/ready` should return `"status": "ok"` for both `database` and `supabase`.
+4. Authentication → **URL Configuration**: set **Site URL** to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to **Redirect URLs** (the confirmation email link returns there). Email confirmation is on by default; on the free plan Supabase sends only a few auth emails per hour.
+
+5. Verify connectivity with the backend running: `GET http://127.0.0.1:8000/health/ready` should return `"status": "ok"` for both `database` and `supabase`.
 
 ## Local setup (Windows / PowerShell)
 
@@ -88,6 +90,15 @@ npm run dev
 ```
 
 - App: http://localhost:3000
+
+## Authentication (frontend)
+
+Supabase Auth with the session in cookies (`@supabase/ssr`), so the browser, `proxy.ts` and server layouts share one session.
+
+- `/register` → confirmation email → `/auth/callback` exchanges the link's code for a session → `/dashboard`. `/login` signs in with email and password; **Sign out** ends the session.
+- `proxy.ts` refreshes the session on every page request and redirects signed-out visitors from `/dashboard`, `/documents`, `/chat` to `/login?next=…` (and signed-in users away from `/login`, `/register`). The app layout re-verifies the user server-side with `getClaims()` (JWT signature and expiry), and the backend verifies the token on every API call.
+- `next` only accepts same-site paths (no open redirects). `lib/api.ts` sends the access token as `Authorization: Bearer …`; a 401 signs the user out and returns them to `/login`.
+- The browser only ever has the public anon key.
 
 ## Embeddings
 

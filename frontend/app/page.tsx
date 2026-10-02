@@ -1,8 +1,9 @@
-import { ArrowUpRight, FileText, FileUp, Quote, ScanSearch, Upload } from "lucide-react"
+import { ArrowRight, ArrowUpRight, FileText, FileUp, Quote, ScanSearch, Upload } from "lucide-react"
+import Link from "next/link"
 
-import { ApiStatus } from "@/components/common/api-status"
 import { Logo } from "@/components/common/logo"
 import { Button } from "@/components/ui/button"
+import { getSessionUser } from "@/lib/supabase/server"
 
 const STEPS = [
   {
@@ -22,13 +23,34 @@ const STEPS = [
   },
 ] as const
 
-export default function Home() {
+export default async function Home() {
+  const signedIn = Boolean(await getSessionUser())
+  const startHref = signedIn ? "/dashboard" : "/register"
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
           <Logo />
-          <ApiStatus />
+          <nav className="flex items-center gap-1.5">
+            {signedIn ? (
+              <Button asChild size="sm">
+                <Link href="/dashboard">
+                  Open dashboard
+                  <ArrowRight aria-hidden />
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button asChild size="sm">
+                  <Link href="/register">Get started</Link>
+                </Button>
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
@@ -43,9 +65,11 @@ export default function Home() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Button size="lg" type="button">
-              <Upload aria-hidden />
-              Upload document
+            <Button asChild size="lg">
+              <Link href={startHref}>
+                <Upload aria-hidden />
+                Upload document
+              </Link>
             </Button>
             <span className="text-[13px] text-text-muted">PDF up to 20 MB</span>
           </div>
@@ -69,9 +93,11 @@ export default function Home() {
               <p className="mt-1.5 max-w-sm text-[14px] leading-relaxed text-text-secondary">
                 Upload your first PDF and start chatting with your knowledge base.
               </p>
-              <Button variant="outline" className="mt-6" type="button">
-                <Upload aria-hidden />
-                Upload document
+              <Button asChild variant="outline" className="mt-6">
+                <Link href={startHref}>
+                  <Upload aria-hidden />
+                  Upload document
+                </Link>
               </Button>
             </div>
           </div>
