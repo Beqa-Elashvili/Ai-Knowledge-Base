@@ -1,4 +1,4 @@
-import type { ApiErrorBody, HealthResponse, User } from "@/types"
+import type { ApiErrorBody, Conversation, Document, HealthResponse, User } from "@/types"
 
 import { createClient } from "@/lib/supabase/client"
 
@@ -77,7 +77,78 @@ async function request<T>(path: string, { auth = true, ...init }: RequestOptions
   return (await response.json()) as T
 }
 
+export interface UploadOptions {
+  title?: string
+  signal?: AbortSignal
+  /** Upload progress of the file bytes, 0–1. */
+  onProgress?: (fraction: number) => void
+  /** Called once the file is sent; the server is now extracting and embedding. */
+  onProcessing?: () => void
+}
+
+/**
+ * Upload a PDF. Uses XMLHttpRequest because fetch cannot report upload
+ * progress. Resolves with the created document once the server has
+ * extracted, chunked and embedded it.
+ */
+async function uploadDocument(file: File, options: UploadOptions = {}): Promise<Document> {
+  const token = await accessToken()
+  const form = new FormData()
+  form.append("file", file)
+  if (options.title) form.append("title", options.title)
+
+  return new Promise<Document>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${API_URL}/documents/upload`)
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    xhr.setRequestHeader("Accept", "application/json")
+    xhr.responseType = "json"
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onProgress?.(event.loaded / event.total)
+    }
+    xhr.upload.onload = () => {
+      options.onProgress?.(1)
+      options.onProcessing?.()
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(xhr.response as Document)
+      if (xhr.status === 401) onUnauthorized()
+      reject(new ApiError(errorMessage(xhr.response as ApiErrorBody | null, "Upload failed."), xhr.status))
+    }
+    xhr.onerror = () => reject(new ApiError("Unable to reach the server.", 0))
+    xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"))
+
+    options.signal?.addEventListener("abort", () => xhr.abort(), { once: true })
+    xhr.send(form)
+  })
+}
+
+const json = (body: unknown): RequestOptions => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+})
+
 export const api = {
   health: (signal?: AbortSignal) => request<HealthResponse>("/health", { signal, auth: false }),
   me: (signal?: AbortSignal) => request<User>("/auth/me", { signal }),
+
+  documents: {
+    list: (signal?: AbortSignal) => request<Document[]>("/documents", { signal }),
+    get: (id: string, signal?: AbortSignal) => request<Document>(`/documents/${id}`, { signal }),
+    upload: uploadDocument,
+    delete: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+  },
+
+  conversations: {
+    list: (documentId?: string, signal?: AbortSignal) =>
+      request<Conversation[]>(
+        documentId ? `/conversations?document_id=${encodeURIComponent(documentId)}` : "/conversations",
+        { signal },
+      ),
+    create: (documentId: string, title?: string) =>
+      request<Conversation>("/conversations", json({ document_id: documentId, title })),
+    delete: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
+  },
 }
