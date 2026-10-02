@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # RAG: maximum characters of document excerpts sent to the model.
     rag_max_context_chars: int = Field(default=12000, ge=1000)
 
+    # Summaries: max characters of document text (or notes) per LLM request.
+    summary_section_chars: int = Field(default=60000, ge=2000)
+
     # Chat memory: earlier messages sent with each question, and the cap on
     # each one's length.
     chat_history_messages: int = Field(default=6, ge=0, le=50)

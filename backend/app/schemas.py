@@ -128,3 +128,12 @@ class ChatMessageResponse(BaseModel):
 
 class ConversationDetailResponse(ConversationResponse):
     messages: list[ChatMessageResponse]
+
+
+Language = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40, pattern=r"^[^\W\d_][\w \-()]*$")]
+
+
+class GenerateRequest(BaseModel):
+    language: Language | None = Field(
+        default=None, description='Output language, e.g. "Georgian". Default: the language of the document.'
+    )

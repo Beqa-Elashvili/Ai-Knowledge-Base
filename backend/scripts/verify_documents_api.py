@@ -251,6 +251,22 @@ def main() -> int:
         c.check("conversation used with another document -> 404", r.status_code == 404)
         c.check("unknown conversation -> 404", chat("q", conversation_id=str(uuid.uuid4()))[0] == 404)
 
+        print("\nSummary:")
+        r = client.post(f"/documents/{topics_id}/summary", headers=auth["a"])
+        summary = r.json().get("summary") or "" if r.status_code == 200 else ""
+        c.check("summary generated", r.status_code == 200 and len(summary) > 100, r.status_code)
+        lowered = summary.lower()
+        c.check("summary covers all three topics",
+                "photosynthesis" in lowered and ("1789" in lowered or "bastille" in lowered) and "backpropagation" in lowered,
+                summary[:120])
+        stored = client.get(f"/documents/{topics_id}", headers=auth["a"]).json().get("summary")
+        c.check("summary stored on the document", stored == summary)
+        r = client.post(f"/documents/{topics_id}/summary", json={"language": "Georgian"}, headers=auth["a"])
+        georgian = r.json().get("summary") or "" if r.status_code == 200 else ""
+        c.check("summary in Georgian on request", sum("ა" <= ch <= "ჿ" for ch in georgian) > 50, georgian[:80])
+        c.check("user B summarizing A's document -> 404",
+                client.post(f"/documents/{topics_id}/summary", headers=auth["b"]).status_code == 404)
+
         print("\nConversations API:")
         listing = client.get(f"/conversations?document_id={topics_id}", headers=auth["a"]).json()
         c.check("list shows the conversation", [x["id"] for x in listing] == [conv_id], listing)

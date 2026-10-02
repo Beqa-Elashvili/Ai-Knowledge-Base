@@ -13,6 +13,7 @@ from app.schemas import (
     AskResponse,
     DocumentResponse,
     ErrorResponse,
+    GenerateRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -20,6 +21,7 @@ from app.schemas import (
 from app.services import documents as document_service
 from app.services.ingestion import ingest_pdf
 from app.services.rag import answer_question
+from app.services.summaries import summarize_document
 from app.services.uploads import validate_pdf_upload
 from app.services.vector_search import search_document
 
@@ -130,3 +132,25 @@ def ask(
     was taken from. Waits for the complete answer; not saved to a
     conversation."""
     return AskResponse.model_validate(answer_question(db, user.id, document_id, body.question))
+
+
+@router.post(
+    "/{document_id}/summary",
+    response_model=DocumentResponse,
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "Document is not processed yet"},
+        502: {"model": ErrorResponse, "description": "AI model or database failure"},
+    },
+)
+def generate_summary(
+    document_id: uuid.UUID,
+    body: GenerateRequest | None = None,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
+    """Generate (or regenerate) the document's summary from its full text
+    and store it. Returns the document with `summary` filled in. Long
+    documents take longer: they are summarized part by part."""
+    language = body.language if body else None
+    return DocumentResponse.model_validate(summarize_document(db, user.id, document_id, language))
