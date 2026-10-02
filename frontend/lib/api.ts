@@ -1,4 +1,12 @@
-import type { ApiErrorBody, Conversation, Document, HealthResponse, User } from "@/types"
+import type {
+  ApiErrorBody,
+  ChatEvent,
+  Conversation,
+  ConversationDetail,
+  Document,
+  HealthResponse,
+  User,
+} from "@/types"
 
 import { createClient } from "@/lib/supabase/client"
 
@@ -124,6 +132,76 @@ async function uploadDocument(file: File, options: UploadOptions = {}): Promise<
   })
 }
 
+export interface ChatRequest {
+  document_id: string
+  conversation_id?: string
+  message: string
+}
+
+/**
+ * Ask a question and receive the answer as Server-Sent Events
+ * (`meta`, `token`…, `done` | `error`). Errors before the stream starts
+ * (404, 409, 502, …) reject with ApiError; abort the signal to stop the
+ * answer (the backend saves what was generated so far).
+ */
+async function streamChat(body: ChatRequest, onEvent: (event: ChatEvent) => void, signal?: AbortSignal): Promise<void> {
+  const token = await accessToken()
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error
+    throw new ApiError("Unable to reach the server.", 0)
+  }
+  if (!response.ok || !response.body) {
+    const errorBody = (await response.json().catch(() => null)) as ApiErrorBody | null
+    if (response.status === 401) onUnauthorized()
+    throw new ApiError(errorMessage(errorBody, "Could not get an answer."), response.status)
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buffer = ""
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      let boundary: number
+      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        const event = parseEvent(block)
+        if (event) onEvent(event)
+      }
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error
+    throw new ApiError("The connection was interrupted.", 0)
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+function parseEvent(block: string): ChatEvent | null {
+  let name = ""
+  const data: string[] = []
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) name = line.slice(6).trim()
+    else if (line.startsWith("data:")) data.push(line.slice(5).trimStart())
+  }
+  if (!name || data.length === 0) return null
+  try {
+    return { event: name, data: JSON.parse(data.join("\n")) } as ChatEvent
+  } catch {
+    return null
+  }
+}
+
 const json = (body: unknown): RequestOptions => ({
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -153,8 +231,11 @@ export const api = {
         documentId ? `/conversations?document_id=${encodeURIComponent(documentId)}` : "/conversations",
         { signal },
       ),
+    get: (id: string, signal?: AbortSignal) => request<ConversationDetail>(`/conversations/${id}`, { signal }),
     create: (documentId: string, title?: string) =>
       request<Conversation>("/conversations", json({ document_id: documentId, title })),
     delete: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
   },
+
+  chat: { stream: streamChat },
 }
