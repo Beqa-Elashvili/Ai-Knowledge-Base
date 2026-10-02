@@ -1,38 +1,25 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useState } from "react"
-import { toast } from "sonner"
+import { useCallback } from "react"
 
-import { useConversations } from "@/components/layout/conversations-provider"
-import { api, ApiError } from "@/lib/api"
+/** URL of a new, not yet saved chat about a document (optionally with a prefilled question). */
+export function newChatHref(documentId: string, question?: string): string {
+  const params = new URLSearchParams({ document: documentId })
+  if (question) params.set("q", question)
+  return `/chat/new?${params}`
+}
 
-/** Create a conversation about a document and open it. */
+/**
+ * Open a new chat about a document. Nothing is created until the first
+ * question is sent (POST /chat creates the conversation then), so opening
+ * and leaving a chat leaves no empty conversations behind.
+ */
 export function useStartChat() {
   const router = useRouter()
-  const { refresh } = useConversations()
-  const [startingId, setStartingId] = useState<string | null>(null)
-
   const startChat = useCallback(
-    async (documentId: string, question?: string) => {
-      setStartingId(documentId)
-      try {
-        const conversation = await api.conversations.create(documentId)
-        void refresh()
-        const query = question ? `?q=${encodeURIComponent(question)}` : ""
-        router.push(`/chat/${conversation.id}${query}`)
-        return true
-      } catch (error) {
-        toast.error("Could not start a chat", {
-          description: error instanceof ApiError ? error.message : "Please try again.",
-        })
-        return false
-      } finally {
-        setStartingId(null)
-      }
-    },
-    [refresh, router],
+    (documentId: string, question?: string) => router.push(newChatHref(documentId, question)),
+    [router],
   )
-
-  return { startChat, startingId }
+  return { startChat }
 }

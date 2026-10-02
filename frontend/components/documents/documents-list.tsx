@@ -164,7 +164,7 @@ export function DocumentsList() {
 }
 
 function DocumentRow({ document, onDeleted }: { document: Document; onDeleted: (id: string) => void }) {
-  const { startChat, startingId } = useStartChat()
+  const { startChat } = useStartChat()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const ready = document.status === "ready"
 
@@ -196,11 +196,10 @@ function DocumentRow({ document, onDeleted }: { document: Document; onDeleted: (
           variant="ghost"
           size="sm"
           disabled={!ready}
-          loading={startingId === document.id}
-          onClick={() => void startChat(document.id)}
+          onClick={() => startChat(document.id)}
           aria-label={`Chat with ${document.title}`}
         >
-          {startingId !== document.id && <MessageSquare aria-hidden />}
+          <MessageSquare aria-hidden />
           <span className="hidden sm:inline">Chat</span>
         </Button>
         <DropdownMenu>

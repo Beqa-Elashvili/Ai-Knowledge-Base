@@ -1,13 +1,18 @@
 "use client"
 
 import { CircleAlert, CircleCheck } from "lucide-react"
+import { usePathname } from "next/navigation"
 import { Toaster as Sonner } from "sonner"
 
 /** Quiet, monochrome toasts at the bottom right. Use `toast` from "sonner". */
 export function Toaster() {
+  // On chat pages, stay above the question input instead of covering Send.
+  const aboveComposer = usePathname().startsWith("/chat")
   return (
     <Sonner
       position="bottom-right"
+      offset={aboveComposer ? { bottom: 140, right: 24 } : undefined}
+      mobileOffset={aboveComposer ? { bottom: 150 } : undefined}
       gap={8}
       icons={{
         success: <CircleCheck className="size-4 text-success" strokeWidth={1.75} />,

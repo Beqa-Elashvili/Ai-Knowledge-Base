@@ -84,7 +84,7 @@ export function DocumentView({ id }: { id: string }) {
 
 function DocumentDetails({ document, onChange }: { document: Document; onChange: (document: Document) => void }) {
   const router = useRouter()
-  const { startChat, startingId } = useStartChat()
+  const { startChat } = useStartChat()
   const [language, setLanguage] = useState("")
   const [summarizing, setSummarizing] = useState(false)
   const [generatingQuestions, setGeneratingQuestions] = useState(false)
@@ -147,11 +147,10 @@ function DocumentDetails({ document, onChange }: { document: Document; onChange:
 
         <div className="flex shrink-0 items-center gap-2">
           <Button
-            onClick={() => void startChat(document.id)}
+            onClick={() => startChat(document.id)}
             disabled={!ready}
-            loading={startingId === document.id}
           >
-            {startingId !== document.id && <MessageSquare aria-hidden />}
+            <MessageSquare aria-hidden />
             Chat
           </Button>
           <DropdownMenu>
@@ -235,8 +234,7 @@ function DocumentDetails({ document, onChange }: { document: Document; onChange:
                   <li key={question}>
                     <button
                       type="button"
-                      disabled={startingId !== null}
-                      onClick={() => void startChat(document.id, question)}
+                      onClick={() => startChat(document.id, question)}
                       className="group flex h-full w-full items-start justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3.5 text-left text-[14px] leading-snug shadow-xs transition-[border-color,box-shadow,background-color] duration-200 hover:border-border-strong hover:shadow-card-hover focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none disabled:opacity-60"
                     >
                       <span>{question}</span>

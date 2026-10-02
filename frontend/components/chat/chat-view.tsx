@@ -2,7 +2,7 @@
 
 import { ArrowLeft, FileText, MessageSquarePlus, MoreHorizontal, Trash2 } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useStartChat } from "@/hooks/use-start-chat"
+import { newChatHref, useStartChat } from "@/hooks/use-start-chat"
 import { api, ApiError } from "@/lib/api"
 import type { ConversationDetail, Document, Message } from "@/types"
 
@@ -33,7 +33,7 @@ type Load =
   | { state: "loading" }
   | { state: "missing" }
   | { state: "error"; message: string }
-  | { state: "ready"; conversation: ConversationDetail; document: Document }
+  | { state: "ready"; conversation: ConversationDetail | null; document: Document }
 
 let keySeed = 0
 const newKey = () => `local-${++keySeed}`
@@ -49,9 +49,18 @@ function toTurn(message: Message): ChatTurnMessage {
   }
 }
 
-export function ChatView({ conversationId, initialQuestion }: { conversationId: string; initialQuestion?: string }) {
+interface ChatViewProps {
+  /** Existing conversation, or null for a new chat that is created by its first question. */
+  conversationId: string | null
+  /** Document of a new chat (when conversationId is null). */
+  documentId?: string
+  initialQuestion?: string
+}
+
+export function ChatView({ conversationId, documentId, initialQuestion }: ChatViewProps) {
   const router = useRouter()
-  const pathname = usePathname()
+  // Set once the first answer of a new chat reports its conversation id.
+  const [activeId, setActiveId] = useState<string | null>(conversationId)
   const email = useUserEmail()
   const { refresh } = useConversations()
 
@@ -64,14 +73,20 @@ export function ChatView({ conversationId, initialQuestion }: { conversationId: 
 
   const streaming = messages.some((m) => m.status === "thinking" || m.status === "streaming")
 
-  // Load the conversation and its document.
+  // Load the conversation (if any) and its document.
   useEffect(() => {
     const controller = new AbortController()
-    api.conversations
-      .get(conversationId, controller.signal)
-      .then(async (conversation) => {
-        const document = await api.documents.get(conversation.document_id, controller.signal)
-        setMessages(conversation.messages.map(toTurn))
+    const loadAll = async () => {
+      if (conversationId) {
+        const conversation = await api.conversations.get(conversationId, controller.signal)
+        return { conversation, document: await api.documents.get(conversation.document_id, controller.signal) }
+      }
+      if (!documentId) throw new ApiError("No document selected.", 404)
+      return { conversation: null, document: await api.documents.get(documentId, controller.signal) }
+    }
+    loadAll()
+      .then(({ conversation, document }) => {
+        setMessages(conversation ? conversation.messages.map(toTurn) : [])
         setLoad({ state: "ready", conversation, document })
       })
       .catch((error: unknown) => {
@@ -80,12 +95,13 @@ export function ChatView({ conversationId, initialQuestion }: { conversationId: 
         setLoad({ state: "error", message: error instanceof ApiError ? error.message : "Could not load this conversation." })
       })
     return () => controller.abort()
-  }, [conversationId])
+  }, [conversationId, documentId])
 
   // A question passed as ?q= is prefilled once; drop it from the URL so a reload does not repeat it.
   useEffect(() => {
-    if (initialQuestion) router.replace(pathname, { scroll: false })
-  }, [initialQuestion, pathname, router])
+    if (!initialQuestion) return
+    window.history.replaceState(null, "", conversationId ? `/chat/${conversationId}` : newChatHref(documentId ?? ""))
+  }, [initialQuestion, conversationId, documentId])
 
   // Stop a running answer when leaving the page.
   useEffect(() => () => controllerRef.current?.abort(), [])
@@ -119,9 +135,15 @@ export function ChatView({ conversationId, initialQuestion }: { conversationId: 
       let finished = false
       try {
         await api.chat.stream(
-          { document_id: load.document.id, conversation_id: conversationId, message: question },
+          { document_id: load.document.id, conversation_id: activeId ?? undefined, message: question },
           (event) => {
-            if (event.event === "token") {
+            if (event.event === "meta" && !activeId) {
+              // The first question created the conversation: give the page its real URL
+              // without a navigation, so the stream keeps running.
+              setActiveId(event.data.conversation_id)
+              window.history.replaceState(null, "", `/chat/${event.data.conversation_id}`)
+              void refresh()
+            } else if (event.event === "token") {
               received += event.data.text
               update((m) => ({ content: m.content + event.data.text, status: "streaming" }))
             } else if (event.event === "done") {
@@ -155,7 +177,7 @@ export function ChatView({ conversationId, initialQuestion }: { conversationId: 
         controllerRef.current = null
       }
     },
-    [conversationId, input, load, refresh, streaming],
+    [activeId, input, load, refresh, streaming],
   )
 
   function retry(assistantKey: string) {
@@ -195,8 +217,8 @@ export function ChatView({ conversationId, initialQuestion }: { conversationId: 
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh">
       <ChatHeader
         document={document}
-        title={conversation.title ?? messages.find((m) => m.role === "user")?.content ?? "New conversation"}
-        conversationId={conversationId}
+        title={conversation?.title ?? messages.find((m) => m.role === "user")?.content ?? "New conversation"}
+        conversationId={activeId}
         disabled={streaming}
         onDeleted={() => {
           void refresh()
@@ -259,7 +281,7 @@ function ChatHeader({
 }: {
   document: Document
   title: string
-  conversationId: string
+  conversationId: string | null
   disabled: boolean
   onDeleted: () => void
 }) {
@@ -268,6 +290,7 @@ function ChatHeader({
   const [deleting, setDeleting] = useState(false)
 
   async function remove() {
+    if (!conversationId) return
     setDeleting(true)
     try {
       await api.conversations.delete(conversationId)
@@ -303,12 +326,12 @@ function ChatHeader({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => void startChat(document.id)}>
+          <DropdownMenuItem onSelect={() => startChat(document.id)}>
             <MessageSquarePlus aria-hidden />
             New chat about this document
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem destructive disabled={disabled} onSelect={() => setConfirmOpen(true)}>
+          <DropdownMenuItem destructive disabled={disabled || !conversationId} onSelect={() => setConfirmOpen(true)}>
             <Trash2 aria-hidden />
             Delete conversation
           </DropdownMenuItem>

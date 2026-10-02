@@ -40,7 +40,7 @@ export function NewChatDialog({ children, onStarted }: { children: ReactNode; on
 function DocumentPicker({ onStarted }: { onStarted: () => void }) {
   const [documents, setDocuments] = useState<Document[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { startChat, startingId } = useStartChat()
+  const { startChat } = useStartChat()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -89,9 +89,9 @@ function DocumentPicker({ onStarted }: { onStarted: () => void }) {
         <li key={doc.id}>
           <button
             type="button"
-            disabled={startingId !== null}
-            onClick={async () => {
-              if (await startChat(doc.id)) onStarted()
+            onClick={() => {
+              startChat(doc.id)
+              onStarted()
             }}
             className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface focus-visible:bg-surface focus-visible:outline-none disabled:opacity-60"
           >

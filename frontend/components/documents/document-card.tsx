@@ -25,7 +25,7 @@ const STATUS_LABEL = { processing: "Processing", failed: "Failed" } as const
 
 export function DocumentCard({ document, onDeleted }: { document: Document; onDeleted: (id: string) => void }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const { startChat, startingId } = useStartChat()
+  const { startChat } = useStartChat()
   const ready = document.status === "ready"
   const href = `/documents/${document.id}`
 
@@ -77,10 +77,9 @@ export function DocumentCard({ document, onDeleted }: { document: Document; onDe
             variant="ghost"
             size="sm"
             disabled={!ready}
-            loading={startingId === document.id}
-            onClick={() => void startChat(document.id)}
+            onClick={() => startChat(document.id)}
           >
-            {startingId !== document.id && <MessageSquare aria-hidden />}
+            <MessageSquare aria-hidden />
             Chat
           </Button>
           <Button asChild variant="ghost" size="sm" className="text-foreground">
