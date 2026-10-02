@@ -93,7 +93,7 @@ supabase/
 | Layer | Technology |
 | --- | --- |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, shadcn/ui (Radix), Lucide, Sonner, react-markdown |
-| Backend | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2, psycopg 3, PyMuPDF, httpx |
+| Backend | Python 3.12, FastAPI, Pydantic, SQLAlchemy 2, psycopg 3, PyMuPDF, httpx |
 | Data | Supabase PostgreSQL + pgvector (HNSW), Supabase Storage, Supabase Auth |
 | AI | Google Gemini (free tier works): `gemini-embedding-2` at 1536 dimensions, `gemini-3.5-flash-lite` for answers. OpenAI `text-embedding-3-small` is supported as an alternative embedding provider. |
 | Tests | pytest, Vitest, Playwright (E2E) |
@@ -201,7 +201,7 @@ Only `NEXT_PUBLIC_*` values reach the browser. Never put the service key or AI k
 
 ## Local setup
 
-Requirements: Python 3.11, Node.js ≥ 20.9, a Supabase project (free plan is fine) and a Gemini API key.
+Requirements: Python 3.12, Node.js ≥ 20.9, a Supabase project (free plan is fine) and a Gemini API key.
 
 ```powershell
 git clone https://github.com/Beqa-Elashvili/Ai-Knowledge-Base.git
@@ -387,7 +387,7 @@ Both halves run on Vercel as two projects (database, storage and auth stay on Su
 | `ai-knowledge-base` (Next.js) | `frontend` | https://ai-knowledge-base-gamma-wine.vercel.app |
 | `ai-knowledge-base-api` (FastAPI) | `backend` | https://ai-knowledge-base-api-kappa.vercel.app |
 
-- The backend runs as one Python function: `backend/api/index.py` imports the app, and `backend/vercel.json` routes every path to it with `maxDuration: 300`. Vercel uses Python 3.12, and `.python-version` is excluded by `.vercelignore`.
+- The backend runs as one Python function: `backend/api/index.py` imports the app, and `backend/vercel.json` routes every path to it with `maxDuration: 300`. Vercel uses Python 3.12 (`.python-version`).
 - Vercel limits a request body to 4.5 MB, so production uses `MAX_UPLOAD_SIZE_MB=4` and `NEXT_PUBLIC_MAX_UPLOAD_MB=4`. An upload must also finish embedding within 300 s (about 200 pages on the Gemini free tier). For larger PDFs, deploy the backend with the Dockerfile instead.
 - `.vercelignore` files keep `.env*`, `venv/`, tests and scripts out of every upload. Environment variables are set in each Vercel project (`vercel env add NAME production`).
 - To redeploy, run `npx vercel deploy --prod` in `backend/` or `frontend/`. After changing a `NEXT_PUBLIC_*` value, redeploy the frontend, because those values are built in.
@@ -404,7 +404,7 @@ docker build -t ai-knowledge-base-api .
 docker run --env-file .env -e ENVIRONMENT=production -p 8000:8000 ai-knowledge-base-api
 ```
 
-Without Docker, use build command `pip install -r requirements.txt` (Python 3.11, see `.python-version`) and start command:
+Without Docker, use build command `pip install -r requirements.txt` (Python 3.12, see `.python-version`) and start command:
 
 ```
 uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
