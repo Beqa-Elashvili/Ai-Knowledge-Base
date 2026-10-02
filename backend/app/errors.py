@@ -9,6 +9,7 @@ import logging
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,44 @@ class ExternalServiceError(AppError):
 
     status_code = status.HTTP_502_BAD_GATEWAY
     default_message = "An upstream service failed. Please try again."
+
+
+class UnhandledErrorMiddleware:
+    """Turn unexpected exceptions into a JSON 500 *inside* the CORS layer.
+
+    FastAPI's catch-all Exception handler runs in the outermost middleware,
+    outside CORSMiddleware, so its 500s carry no CORS headers and browsers
+    report them as network failures ("Unable to reach the server"). Added
+    before CORSMiddleware, this middleware sits inside it. Errors after a
+    response has started (e.g. mid-stream) are re-raised.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception:
+            if started:
+                raise
+            logger.exception("Unhandled error on %s %s", scope.get("method"), scope.get("path"))
+            response = JSONResponse(
+                {"detail": "Internal server error."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            await response(scope, receive, send)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

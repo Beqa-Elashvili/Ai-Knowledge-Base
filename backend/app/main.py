@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, chat, conversations, documents, health
 from app.config import get_settings
-from app.errors import register_exception_handlers
+from app.errors import UnhandledErrorMiddleware, register_exception_handlers
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +29,8 @@ def create_app() -> FastAPI:
         description="Retrieval-Augmented Generation over your own documents.",
     )
 
+    # Added first so it ends up inside CORSMiddleware: 500s keep CORS headers.
+    app.add_middleware(UnhandledErrorMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
