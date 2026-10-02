@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.errors import AppError, ExternalServiceError
+from app.models import Document
 from app.services import documents as document_service
 from app.services.embeddings import embed_query
 
@@ -31,7 +32,7 @@ MAX_MATCH_COUNT = 50  # the SQL function caps match_count at 50 too
 
 _MATCH_SQL = text(
     """
-    select id, document_id, content, page_number, page_end, chunk_index, similarity
+    select id, document_id, content, page_number, page_end, page_breaks, chunk_index, similarity
     from public.match_document_chunks(
         cast(:embedding as extensions.vector), :document_id, :match_count, :min_similarity
     )
@@ -57,6 +58,8 @@ class RetrievedChunk:
     page_end: int  # last page
     chunk_index: int
     similarity: float  # 1 = same direction, 0 = unrelated
+    # [[offset, page], ...]: where later pages begin in `content`
+    page_breaks: list[list[int]] | None = None
 
 
 def search_document(
@@ -71,25 +74,35 @@ def search_document(
     best match first. Raises DocumentNotFoundError (404) if the document is
     missing or not the user's, DocumentNotReadyError (409) if it has no
     embeddings yet."""
+    document = document_service.get_owned_document(db, user_id, document_id)
+    return search_owned_document(db, document, question, top_k, min_similarity)
+
+
+def search_owned_document(
+    db: Session,
+    document: Document,
+    question: str,
+    top_k: int | None = None,
+    min_similarity: float | None = None,
+) -> list[RetrievedChunk]:
+    """search_document for a document whose ownership is already verified."""
     question = question.strip()
     if not question:
         raise ValueError("Question is empty")
+    if document.status != "ready":
+        raise DocumentNotReadyError()
     settings = get_settings()
     top_k = max(1, min(top_k or settings.search_top_k, MAX_MATCH_COUNT))
     min_similarity = settings.search_min_similarity if min_similarity is None else min_similarity
 
-    document = document_service.get_owned_document(db, user_id, document_id)
-    if document.status != "ready":
-        raise DocumentNotReadyError()
-
     started = time.perf_counter()
     query_embedding = embed_query(question)
     embedded = time.perf_counter()
-    chunks = match_chunks(db, document_id, query_embedding, top_k, min_similarity)
+    chunks = match_chunks(db, document.id, query_embedding, top_k, min_similarity)
 
     logger.info(
         "Vector search document=%s top_k=%d hits=%d best=%.3f embed=%.2fs search=%.2fs",
-        document_id, top_k, len(chunks), chunks[0].similarity if chunks else 0.0,
+        document.id, top_k, len(chunks), chunks[0].similarity if chunks else 0.0,
         embedded - started, time.perf_counter() - embedded,
     )
     return chunks

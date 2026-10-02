@@ -7,7 +7,7 @@ import pytest
 
 from app.config import Settings
 from app.models import EMBEDDING_DIMENSIONS
-from app.services import embeddings, ingestion
+from app.services import embeddings, gemini, ingestion
 from app.services.uploads import ValidatedPdf
 
 DIM = EMBEDDING_DIMENSIONS
@@ -16,7 +16,7 @@ DIM = EMBEDDING_DIMENSIONS
 @pytest.fixture(autouse=True)
 def no_sleep_and_fresh_provider(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     sleeps: list[float] = []
-    monkeypatch.setattr(embeddings.time, "sleep", sleeps.append)
+    monkeypatch.setattr(gemini.time, "sleep", sleeps.append)
     monkeypatch.setattr(embeddings, "_provider", None)
     return sleeps
 
@@ -24,7 +24,7 @@ def no_sleep_and_fresh_provider(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 def gemini_with(handler) -> embeddings.GeminiEmbeddings:
     provider = embeddings.GeminiEmbeddings(api_key="secret-key", model="gemini-embedding-2")
     provider._client = httpx.Client(
-        base_url=embeddings.GEMINI_BASE_URL,
+        base_url=gemini.GEMINI_BASE_URL,
         headers=provider._client.headers,
         transport=httpx.MockTransport(handler),
     )
@@ -115,7 +115,7 @@ def test_persistent_outage_gives_safe_502(monkeypatch: pytest.MonkeyPatch, no_sl
         embeddings.embed_documents(["a"])
     assert exc_info.value.status_code == 502
     assert "busy" in exc_info.value.message
-    assert len(no_sleep_and_fresh_provider) == embeddings.MAX_ATTEMPTS - 1
+    assert len(no_sleep_and_fresh_provider) == gemini.MAX_ATTEMPTS - 1
 
 
 def test_client_errors_are_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:

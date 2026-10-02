@@ -63,6 +63,9 @@ class TextChunk:
     page_end: int  # last page (== page_number unless the chunk spans pages)
     start_char: int  # offsets into the joined text (debugging / tests)
     end_char: int
+    # Where each later page begins inside `content`: ((offset, page), ...).
+    # Empty for single-page chunks.
+    page_breaks: tuple[tuple[int, int], ...] = ()
 
 
 class _PageMap:
@@ -87,6 +90,12 @@ class _PageMap:
 
     def page_at(self, offset: int) -> int:
         return self.page_numbers[bisect.bisect_right(self.starts, offset) - 1]
+
+    def breaks_within(self, start: int, end: int) -> tuple[tuple[int, int], ...]:
+        """Pages that begin strictly inside [start, end), as (offset from start, page)."""
+        first = bisect.bisect_right(self.starts, start)
+        last = bisect.bisect_left(self.starts, end)
+        return tuple((self.starts[i] - start, self.page_numbers[i]) for i in range(first, last))
 
 
 def _find_split(text: str, start: int, hard_end: int, settings: ChunkSettings) -> int:
@@ -151,6 +160,7 @@ def chunk_pages(
                     page_end=page_map.page_at(content_end - 1),
                     start_char=content_start,
                     end_char=content_end,
+                    page_breaks=page_map.breaks_within(content_start, content_end),
                 )
             )
         if end >= len(text):

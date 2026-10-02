@@ -49,6 +49,8 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)  # first page of the chunk
     page_end: Mapped[int] = mapped_column(Integer, nullable=False)  # last page (== page_number unless it spans pages)
+    # [[offset, page], ...]: where later pages begin in `content` (multi-page chunks only)
+    page_breaks: Mapped[list[list[int]] | None] = mapped_column(JSONB)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

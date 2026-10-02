@@ -11,7 +11,7 @@ Upload your own PDFs and chat with them through a real Retrieval-Augmented Gener
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, Lucide |
 | Backend  | Python 3.11, FastAPI, Pydantic, SQLAlchemy, PyMuPDF      |
 | Data     | Supabase PostgreSQL + pgvector, Supabase Storage, Supabase Auth |
-| AI       | Embeddings (1536-d): Google Gemini `gemini-embedding-2` (default, free tier) or OpenAI `text-embedding-3-small`; streaming chat model |
+| AI       | Embeddings (1536-d): Google Gemini `gemini-embedding-2` (default, free tier) or OpenAI `text-embedding-3-small`; chat: Gemini `gemini-3.5-flash-lite` |
 
 ## Supabase setup
 
@@ -107,6 +107,12 @@ python -m scripts.reembed --all    # every chunk
 
 `services/vector_search.py` embeds the question and calls the `match_document_chunks` SQL function (pgvector cosine distance on an HNSW index). Ownership is checked first and the function only reads rows of that one `document_id`, so a search never returns chunks from another document or another user. `SEARCH_TOP_K` (default 5, max 50) and `SEARCH_MIN_SIMILARITY` (default 0) are configurable.
 
+## RAG
+
+`services/rag.py`: question → vector search in that document → excerpts labelled with their pages (in reading order, up to `RAG_MAX_CONTEXT_CHARS`) → Gemini (`LLM_MODEL`) with a system prompt that allows only the excerpts as knowledge, requires page citations like `[p. 14]`, and says so when the answer is not in the document. Answers come in the question's language.
+
+Sources are never taken from the model alone: a page is listed only if the answer cites it **and** a retrieved excerpt covers it, deduplicated, in page order. Chunks that cross pages store where each page begins (`page_breaks`), and the prompt marks it (`[Page 15 begins here]`), so citations name the exact page rather than a range. An answer that cites nothing ("not found in the document") has no sources.
+
 ## API (so far)
 
 All endpoints except health require `Authorization: Bearer <Supabase access token>`.
@@ -120,6 +126,7 @@ All endpoints except health require `Authorization: Bearer <Supabase access toke
 | GET | `/documents` | Current user's documents, newest first |
 | GET | `/documents/{id}` | One document (404 if missing or not yours) |
 | DELETE | `/documents/{id}` | Deletes record, chunks, conversations and the stored file → 204 |
+| POST | `/documents/{id}/ask` | `{"question": "..."}` → answer from the document only, with `sources` `[{"page": 14, "similarity": 0.89}]` (waits for the full answer; not saved) |
 | POST | `/documents/{id}/search` | `{"question": "...", "top_k": 5}` → chunks of that document most similar to the question, best first, with pages and similarity (retrieval only, no LLM) |
 
 Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 409 (document not ready for search) / 413 / 415 / 422 (also damaged, password-protected or scanned PDFs) / 502 / 500; internal details are never exposed.

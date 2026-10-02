@@ -151,3 +151,16 @@ def test_georgian_text() -> None:
 def test_invalid_settings_rejected(size: int, overlap: int) -> None:
     with pytest.raises(ValueError):
         ChunkSettings(chunk_size=size, chunk_overlap=overlap)
+
+
+def test_page_breaks_point_at_the_first_character_of_each_later_page() -> None:
+    pages = [PageText(1, "Alpha " * 30), PageText(2, ""), PageText(3, "Gamma " * 30), PageText(4, "Delta " * 30)]
+    chunks = chunk_pages(pages, ChunkSettings(chunk_size=400, chunk_overlap=0))
+    multi = [c for c in chunks if c.page_end > c.page_number]
+    assert multi, "expected at least one chunk crossing pages"
+    for chunk in chunks:
+        assert [page for _, page in chunk.page_breaks] == [
+            p for p in (3, 4) if chunk.page_number < p <= chunk.page_end
+        ]  # blank page 2 never appears
+        for offset, page in chunk.page_breaks:
+            assert chunk.content[offset:].startswith({3: "Gamma", 4: "Delta"}[page])

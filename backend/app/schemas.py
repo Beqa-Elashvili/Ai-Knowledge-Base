@@ -74,3 +74,22 @@ class SearchResponse(BaseModel):
     document_id: uuid.UUID
     question: str
     results: list[SearchResult]
+
+
+class AskRequest(BaseModel):
+    question: Question
+
+
+class SourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    page: int
+    similarity: float
+
+
+class AskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    answer: str
+    sources: list[SourceResponse]
+    model: str

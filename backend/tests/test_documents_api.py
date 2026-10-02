@@ -153,3 +153,22 @@ def test_search_other_users_document_returns_404(authed_client, monkeypatch: pyt
 
     monkeypatch.setattr(documents_api, "search_document", not_found)
     assert authed_client.post(f"/documents/{DOC_ID}/search", json={"question": "q"}).status_code == 404
+
+
+# --- ask (RAG) ------------------------------------------------------------
+
+def test_ask_returns_answer_and_sources(authed_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.rag import RagAnswer, Source
+
+    calls = []
+
+    def answer(db, user_id, document_id, question):
+        calls.append((user_id, document_id, question))
+        return RagAnswer(answer="In 1789 [p. 2].", sources=[Source(page=2, similarity=0.8)], model="m", excerpts_used=3)
+
+    monkeypatch.setattr(documents_api, "answer_question", answer)
+    response = authed_client.post(f"/documents/{DOC_ID}/ask", json={"question": "When?"})
+
+    assert response.status_code == 200
+    assert calls == [(USER.id, DOC_ID, "When?")]
+    assert response.json() == {"answer": "In 1789 [p. 2].", "sources": [{"page": 2, "similarity": 0.8}], "model": "m"}

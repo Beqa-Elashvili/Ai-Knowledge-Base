@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     search_top_k: int = Field(default=5, ge=1, le=50)
     search_min_similarity: float = Field(default=0.0, ge=0.0, le=1.0)
 
+    # Chat model (Gemini). LLM_THINKING_LEVEL only applies to models that
+    # think (e.g. gemini-3.5-flash); empty = the model's default.
+    llm_model: str = "gemini-3.5-flash-lite"
+    llm_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    llm_max_output_tokens: int = Field(default=2048, ge=64)
+    llm_thinking_level: Literal["", "minimal", "low", "medium", "high"] = ""
+
+    # RAG: maximum characters of document excerpts sent to the model.
+    rag_max_context_chars: int = Field(default=12000, ge=1000)
+
     # AI provider keys
     gemini_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None

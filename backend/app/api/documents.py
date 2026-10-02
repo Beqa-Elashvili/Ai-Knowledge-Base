@@ -8,9 +8,18 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.config import get_settings
 from app.database import get_db
-from app.schemas import DocumentResponse, ErrorResponse, SearchRequest, SearchResponse, SearchResult
+from app.schemas import (
+    AskRequest,
+    AskResponse,
+    DocumentResponse,
+    ErrorResponse,
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+)
 from app.services import documents as document_service
 from app.services.ingestion import ingest_pdf
+from app.services.rag import answer_question
 from app.services.uploads import validate_pdf_upload
 from app.services.vector_search import search_document
 
@@ -100,3 +109,24 @@ def search(
         question=body.question,
         results=[SearchResult.model_validate(chunk) for chunk in chunks],
     )
+
+
+@router.post(
+    "/{document_id}/ask",
+    response_model=AskResponse,
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "Document has no embeddings yet"},
+        502: {"model": ErrorResponse, "description": "Embedding, database or AI model failure"},
+    },
+)
+def ask(
+    document_id: uuid.UUID,
+    body: AskRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AskResponse:
+    """Answer a question from your document only (RAG), with the pages it
+    was taken from. Waits for the complete answer; not saved to a
+    conversation."""
+    return AskResponse.model_validate(answer_question(db, user.id, document_id, body.question))

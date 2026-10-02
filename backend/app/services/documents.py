@@ -73,6 +73,7 @@ def create_document(
                         "content": chunk.content,
                         "page_number": chunk.page_number,
                         "page_end": chunk.page_end,
+                        "page_breaks": [list(b) for b in chunk.page_breaks] or None,
                         "embedding": embedding,
                     }
                     for chunk, embedding in zip(chunks, embeddings, strict=True)

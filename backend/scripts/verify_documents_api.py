@@ -192,6 +192,25 @@ def main() -> int:
             "empty question -> 422",
             client.post(f"/documents/{topics_id}/search", json={"question": "  "}, headers=auth["a"]).status_code == 422,
         )
+
+        print("\nRAG answers:")
+
+        def ask(question: str, who: str = "a"):
+            r = client.post(f"/documents/{topics_id}/ask", json={"question": question}, headers=auth[who])
+            return r.status_code, (r.json() if r.status_code == 200 else {"answer": "", "sources": [], "detail": r.json().get("detail")})
+
+        code, body = ask("When did the French Revolution begin?")
+        c.check("answer comes from the document", code == 200 and "1789" in body["answer"], body.get("answer") or body)
+        c.check("sources = the page it came from", [s["page"] for s in body["sources"]] == [2], body["sources"])
+        code, body = ask("როგორ ამზადებენ მცენარეები საკვებს?")
+        c.check(
+            "Georgian question -> Georgian answer from page 1",
+            code == 200 and any("ა" <= ch <= "ჿ" for ch in body["answer"]) and [s["page"] for s in body["sources"]] == [1],
+            (body.get("answer", "")[:80], body["sources"]),
+        )
+        code, body = ask("Who won the 2018 FIFA World Cup?")
+        c.check("question not covered by the document -> no sources", code == 200 and body["sources"] == [], (body.get("answer", "")[:80], body["sources"]))
+        c.check("user B asking about A's document -> 404", ask("When?", who="b")[0] == 404)
         client.delete(f"/documents/{topics_id}", headers=auth["a"])
 
         print("\nDelete:")
