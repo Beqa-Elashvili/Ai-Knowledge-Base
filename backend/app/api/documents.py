@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, get_current_user
 from app.config import get_settings
 from app.database import get_db
-from app.schemas import DocumentResponse, ErrorResponse
+from app.schemas import DocumentResponse, ErrorResponse, SearchRequest, SearchResponse, SearchResult
 from app.services import documents as document_service
 from app.services.ingestion import ingest_pdf
 from app.services.uploads import validate_pdf_upload
+from app.services.vector_search import search_document
 
 router = APIRouter(
     prefix="/documents",
@@ -74,3 +75,28 @@ def delete_document(
     db: Session = Depends(get_db),
 ) -> None:
     document_service.delete_document(db, user.id, document_id)
+
+
+@router.post(
+    "/{document_id}/search",
+    response_model=SearchResponse,
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "Document has no embeddings yet"},
+        502: {"model": ErrorResponse, "description": "Embedding or database failure"},
+    },
+)
+def search(
+    document_id: uuid.UUID,
+    body: SearchRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SearchResponse:
+    """Semantic search inside one of your documents: the chunks most similar
+    to the question, best first. Retrieval only; no LLM answer."""
+    chunks = search_document(db, user.id, document_id, body.question, top_k=body.top_k)
+    return SearchResponse(
+        document_id=document_id,
+        question=body.question,
+        results=[SearchResult.model_validate(chunk) for chunk in chunks],
+    )

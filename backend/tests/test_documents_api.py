@@ -118,3 +118,38 @@ def test_unexpected_errors_hide_internals(authed_client, monkeypatch: pytest.Mon
     response = client.get("/documents")
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal server error."}
+
+
+# --- search ---------------------------------------------------------------
+
+def test_search_returns_chunks_of_the_users_document(authed_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.vector_search import RetrievedChunk
+
+    calls = []
+
+    def search(db, user_id, document_id, question, top_k=None):
+        calls.append((user_id, document_id, question, top_k))
+        return [RetrievedChunk(uuid.uuid4(), DOC_ID, "Neural networks...", 14, 15, 7, 0.83)]
+
+    monkeypatch.setattr(documents_api, "search_document", search)
+    response = authed_client.post(f"/documents/{DOC_ID}/search", json={"question": " neural networks? ", "top_k": 3})
+
+    assert response.status_code == 200
+    assert calls == [(USER.id, DOC_ID, "neural networks?", 3)]
+    assert response.json()["results"] == [
+        {"chunk_index": 7, "page_number": 14, "page_end": 15, "similarity": 0.83, "content": "Neural networks..."}
+    ]
+
+
+@pytest.mark.parametrize("body", [{"question": "   "}, {"question": "x" * 2001}, {"question": "q", "top_k": 0}, {}])
+def test_search_validates_input(authed_client, monkeypatch: pytest.MonkeyPatch, body) -> None:
+    monkeypatch.setattr(documents_api, "search_document", lambda *a, **k: pytest.fail("must not search"))
+    assert authed_client.post(f"/documents/{DOC_ID}/search", json=body).status_code == 422
+
+
+def test_search_other_users_document_returns_404(authed_client, monkeypatch: pytest.MonkeyPatch) -> None:
+    def not_found(*_args, **_kwargs):
+        raise DocumentNotFoundError()
+
+    monkeypatch.setattr(documents_api, "search_document", not_found)
+    assert authed_client.post(f"/documents/{DOC_ID}/search", json={"question": "q"}).status_code == 404

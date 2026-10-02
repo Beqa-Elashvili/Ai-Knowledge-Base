@@ -103,6 +103,10 @@ python -m scripts.reembed          # only chunks without an embedding
 python -m scripts.reembed --all    # every chunk
 ```
 
+## Vector search
+
+`services/vector_search.py` embeds the question and calls the `match_document_chunks` SQL function (pgvector cosine distance on an HNSW index). Ownership is checked first and the function only reads rows of that one `document_id`, so a search never returns chunks from another document or another user. `SEARCH_TOP_K` (default 5, max 50) and `SEARCH_MIN_SIMILARITY` (default 0) are configurable.
+
 ## API (so far)
 
 All endpoints except health require `Authorization: Bearer <Supabase access token>`.
@@ -116,8 +120,9 @@ All endpoints except health require `Authorization: Bearer <Supabase access toke
 | GET | `/documents` | Current user's documents, newest first |
 | GET | `/documents/{id}` | One document (404 if missing or not yours) |
 | DELETE | `/documents/{id}` | Deletes record, chunks, conversations and the stored file → 204 |
+| POST | `/documents/{id}/search` | `{"question": "...", "top_k": 5}` → chunks of that document most similar to the question, best first, with pages and similarity (retrieval only, no LLM) |
 
-Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 413 / 415 / 422 (also damaged, password-protected or scanned PDFs) / 502 / 500; internal details are never exposed.
+Errors are returned as `{"detail": "..."}` with 400 / 401 / 404 / 409 (document not ready for search) / 413 / 415 / 422 (also damaged, password-protected or scanned PDFs) / 502 / 500; internal details are never exposed.
 
 ## Project structure
 

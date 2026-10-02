@@ -44,6 +44,25 @@ def make_pdf(pages: int = 1, text_on_pages: bool = True, **save_kwargs) -> bytes
     return data
 
 
+TOPIC_PAGES = [
+    "Photosynthesis is the process by which green plants use sunlight, water and carbon dioxide to make glucose and oxygen inside their chloroplasts. ",
+    "The French Revolution began in 1789 when the people of Paris stormed the Bastille, ending the absolute monarchy of Louis XVI. ",
+    "A neural network learns by backpropagation: the error of its prediction flows backwards through the layers to adjust every weight. ",
+]
+
+
+def make_topic_pdf() -> bytes:
+    """One topic per page, each page longer than a chunk, so every topic
+    lands in its own chunk(s) with a known page number."""
+    doc = pymupdf.open()
+    for sentence in TOPIC_PAGES:
+        page = doc.new_page()
+        page.insert_textbox(pymupdf.Rect(50, 50, 545, 800), sentence * 14, fontsize=9)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
 def stored_files(user_id: str) -> list[str]:
     return [f["name"] for f in get_supabase().storage.from_(get_settings().storage_bucket).list(user_id)]
 
@@ -138,6 +157,42 @@ def main() -> int:
         c.check("user B DELETE A's document -> 404", client.delete(f"/documents/{doc_id}", headers=auth["b"]).status_code == 404)
         c.check("A's document survived B's delete attempt", client.get(f"/documents/{doc_id}", headers=auth["a"]).status_code == 200)
         c.check("unknown id -> 404", client.get(f"/documents/{uuid.uuid4()}", headers=auth["a"]).status_code == 404)
+
+        print("\nVector search:")
+        r = client.post("/documents/upload", files={"file": ("topics.pdf", make_topic_pdf(), "application/pdf")}, headers=auth["a"])
+        topics_id = r.json()["id"]
+        c.check("topic PDF uploaded and ready", r.status_code == 201 and r.json()["status"] == "ready")
+        expected_pages = [
+            ("How do plants turn sunlight into food?", 1),
+            ("როდის დაიწყო საფრანგეთის რევოლუცია?", 2),  # Georgian question, English document
+            ("How are the weights of a model updated during training?", 3),
+        ]
+        for question, page in expected_pages:
+            r = client.post(f"/documents/{topics_id}/search", json={"question": question, "top_k": 3}, headers=auth["a"])
+            results = r.json().get("results", []) if r.status_code == 200 else []
+            c.check(
+                f"{question[:40]!r} -> page {page} first",
+                bool(results) and results[0]["page_number"] == page,
+                [(x["page_number"], round(x["similarity"], 3)) for x in results] or r.status_code,
+            )
+        similarities = [x["similarity"] for x in results]
+        c.check("results are sorted best first", similarities == sorted(similarities, reverse=True))
+        r = client.post(f"/documents/{doc_id}/search", json={"question": "photosynthesis in plants", "top_k": 50}, headers=auth["a"])
+        other = r.json().get("results", []) if r.status_code == 200 else []
+        c.check(
+            "searching another document never returns this one's chunks",
+            bool(other) and all("Verification document" in x["content"] for x in other),
+            [x["content"][:30] for x in other] or r.status_code,
+        )
+        c.check(
+            "user B searching A's document -> 404",
+            client.post(f"/documents/{topics_id}/search", json={"question": "q"}, headers=auth["b"]).status_code == 404,
+        )
+        c.check(
+            "empty question -> 422",
+            client.post(f"/documents/{topics_id}/search", json={"question": "  "}, headers=auth["a"]).status_code == 422,
+        )
+        client.delete(f"/documents/{topics_id}", headers=auth["a"])
 
         print("\nDelete:")
         c.check("user A DELETE -> 204", client.delete(f"/documents/{doc_id}", headers=auth["a"]).status_code == 204)

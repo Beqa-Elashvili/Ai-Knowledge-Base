@@ -2,9 +2,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 DocumentStatus = Literal["processing", "ready", "failed"]
 
@@ -50,3 +50,27 @@ class DocumentResponse(BaseModel):
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: str | None
+
+
+Question = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class SearchRequest(BaseModel):
+    question: Question
+    top_k: int | None = Field(default=None, ge=1, le=50, description="Defaults to SEARCH_TOP_K (5)")
+
+
+class SearchResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    chunk_index: int
+    page_number: int
+    page_end: int
+    similarity: float
+    content: str
+
+
+class SearchResponse(BaseModel):
+    document_id: uuid.UUID
+    question: str
+    results: list[SearchResult]
