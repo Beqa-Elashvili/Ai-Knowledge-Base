@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     # RAG: maximum characters of document excerpts sent to the model.
     rag_max_context_chars: int = Field(default=12000, ge=1000)
 
+    # Chat memory: earlier messages sent with each question, and the cap on
+    # each one's length.
+    chat_history_messages: int = Field(default=6, ge=0, le=50)
+    chat_history_message_chars: int = Field(default=2000, ge=200)
+
     # AI provider keys
     gemini_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None

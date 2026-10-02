@@ -99,3 +99,32 @@ class ChatRequest(BaseModel):
     document_id: uuid.UUID
     conversation_id: uuid.UUID | None = None
     message: Question
+
+
+class ConversationCreateRequest(BaseModel):
+    document_id: uuid.UUID
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+
+
+class ConversationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    title: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role: Literal["user", "assistant"]
+    content: str
+    sources: list[SourceResponse] | None
+    created_at: datetime
+
+
+class ConversationDetailResponse(ConversationResponse):
+    messages: list[ChatMessageResponse]

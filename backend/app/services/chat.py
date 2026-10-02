@@ -1,7 +1,8 @@
 """Streaming RAG chat turns.
 
-    prepare_turn()   ownership, conversation check, vector search, prompt
-                     (sync; any failure is a normal HTTP error)
+    prepare_turn()   ownership, conversation check, recent history, follow-up
+                     rewritten as a standalone search query, vector search,
+                     prompt (sync; any failure is a normal HTTP error)
     open_stream()    starts the LLM and waits for its first text, THEN saves
                      the question (creating the conversation if needed), so
                      a request that fails before answering leaves nothing
@@ -34,8 +35,15 @@ from app.models import Document
 from app.services import conversations
 from app.services import documents as document_service
 from app.services.llm import ChatMessage, LLMError, stream_generate
-from app.services.rag import SYSTEM_PROMPT, build_context, build_messages, extract_sources
-from app.services.vector_search import RetrievedChunk, search_owned_document
+from app.services.rag import (
+    SYSTEM_PROMPT,
+    build_context,
+    build_messages,
+    condense_question,
+    extract_sources,
+    history_messages,
+)
+from app.services.vector_search import DocumentNotReadyError, RetrievedChunk, search_owned_document
 
 logger = logging.getLogger(__name__)
 
@@ -59,22 +67,29 @@ def prepare_turn(
     conversation_id: uuid.UUID | None,
     question: str,
 ) -> ChatTurn:
+    settings = get_settings()
     document = document_service.get_owned_document(db, user_id, document_id)
+    history: list[ChatMessage] = []
     if conversation_id is not None:
         conversation = conversations.get_owned_conversation(db, user_id, conversation_id)
         if conversation.document_id != document.id:
             raise conversations.ConversationNotFoundError()
+        previous = conversations.recent_messages(db, conversation_id, settings.chat_history_messages)
+        history = history_messages([(m.role, m.content) for m in previous], settings.chat_history_message_chars)
 
     question = question.strip()
-    chunks = search_owned_document(db, document, question)
-    context, used = build_context(chunks, get_settings().rag_max_context_chars)
+    if document.status != "ready":  # fail fast, before spending an LLM call on the rewrite
+        raise DocumentNotReadyError()
+    search_query = condense_question(history, question)
+    chunks = search_owned_document(db, document, search_query)
+    context, used = build_context(chunks, settings.rag_max_context_chars)
     return ChatTurn(
         user_id=user_id,
         document=document,
         conversation_id=conversation_id,
         question=question,
         excerpts=used,
-        messages=build_messages(document.title, context, question),
+        messages=build_messages(document.title, context, question, history),
     )
 
 

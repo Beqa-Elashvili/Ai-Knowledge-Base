@@ -229,6 +229,7 @@ def main() -> int:
         conv_id = events[0][1]["conversation_id"] if events else None
         c.check("streamed answer is grounded", "1789" in answer, answer[:80])
         c.check("done carries page 2 as source", events and [s["page"] for s in events[-1][1]["sources"]] == [2], events[-1][1] if events else None)
+        events_first_sources = events[-1][1]["sources"] if events else None
         with get_engine().connect() as conn:
             rows = conn.execute(
                 text("select m.role, m.content, m.sources, cv.title, cv.user_id::text, cv.document_id::text "
@@ -238,14 +239,43 @@ def main() -> int:
         c.check("conversation titled from the first question", bool(rows) and rows[0][3] == "When did the French Revolution begin?")
         c.check("user + assistant messages saved", [r[0] for r in rows] == ["user", "assistant"])
         c.check("saved answer == streamed answer, with sources", len(rows) == 2 and rows[1][1] == answer and rows[1][2] == events[-1][1]["sources"])
-        code, events = chat("And what about photosynthesis?", conversation_id=conv_id)
+        code, events = chat("Whose rule did it end?", conversation_id=conv_id)  # "it" = the revolution
+        follow_up = "".join(data["text"] for name, data in events if name == "token")
         with get_engine().connect() as conn:
             count = conn.execute(text("select count(*) from messages where conversation_id = :id"), {"id": conv_id}).scalar_one()
         c.check("follow-up continues the same conversation", code == 200 and events[0][1]["conversation_id"] == conv_id and count == 4)
+        c.check("follow-up understood from history ('it' = the revolution)", "Louis" in follow_up, follow_up[:90])
+        c.check("follow-up cites page 2", bool(events) and [s["page"] for s in events[-1][1]["sources"]] == [2], events[-1][1] if events else None)
         c.check("user B using A's conversation -> 404", chat("q", who="b", conversation_id=conv_id)[0] == 404)
         r = client.post("/chat", json={"document_id": doc_id, "conversation_id": conv_id, "message": "q"}, headers=auth["a"])
         c.check("conversation used with another document -> 404", r.status_code == 404)
         c.check("unknown conversation -> 404", chat("q", conversation_id=str(uuid.uuid4()))[0] == 404)
+
+        print("\nConversations API:")
+        listing = client.get(f"/conversations?document_id={topics_id}", headers=auth["a"]).json()
+        c.check("list shows the conversation", [x["id"] for x in listing] == [conv_id], listing)
+        c.check("other documents' filter excludes it", client.get(f"/conversations?document_id={doc_id}", headers=auth["a"]).json() == [])
+        detail = client.get(f"/conversations/{conv_id}", headers=auth["a"]).json()
+        c.check("GET returns 4 messages in order with sources",
+                [m["role"] for m in detail.get("messages", [])] == ["user", "assistant", "user", "assistant"]
+                and detail["messages"][1]["sources"] == events_first_sources, [m["role"] for m in detail.get("messages", [])])
+        c.check("user B cannot list or open it", client.get("/conversations", headers=auth["b"]).json() == []
+                and client.get(f"/conversations/{conv_id}", headers=auth["b"]).status_code == 404)
+        r = client.post("/conversations", json={"document_id": topics_id}, headers=auth["a"])
+        empty_id = r.json().get("id")
+        c.check("POST creates an empty, untitled conversation", r.status_code == 201 and r.json()["title"] is None)
+        c.check("user B cannot create one on A's document",
+                client.post("/conversations", json={"document_id": topics_id}, headers=auth["b"]).status_code == 404)
+        chat("How do plants make food?", conversation_id=empty_id)
+        titled = client.get(f"/conversations/{empty_id}", headers=auth["a"]).json()
+        c.check("first question becomes its title", titled.get("title") == "How do plants make food?", titled.get("title"))
+        c.check("most recently active conversation is listed first",
+                [x["id"] for x in client.get("/conversations", headers=auth["a"]).json()] == [empty_id, conv_id])
+        c.check("user B DELETE -> 404", client.delete(f"/conversations/{conv_id}", headers=auth["b"]).status_code == 404)
+        c.check("DELETE -> 204", client.delete(f"/conversations/{conv_id}", headers=auth["a"]).status_code == 204)
+        with get_engine().connect() as conn:
+            left = conn.execute(text("select count(*) from messages where conversation_id = :id"), {"id": conv_id}).scalar_one()
+        c.check("its messages are deleted too", left == 0 and client.get(f"/conversations/{conv_id}", headers=auth["a"]).status_code == 404)
         client.delete(f"/documents/{topics_id}", headers=auth["a"])
 
         print("\nDelete:")
