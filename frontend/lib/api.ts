@@ -8,6 +8,7 @@ import type {
   User,
 } from "@/types"
 
+import { readEvents } from "@/lib/sse"
 import { createClient } from "@/lib/supabase/client"
 
 /**
@@ -164,41 +165,11 @@ async function streamChat(body: ChatRequest, onEvent: (event: ChatEvent) => void
     throw new ApiError(errorMessage(errorBody, "Could not get an answer."), response.status)
   }
 
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buffer = ""
   try {
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += value
-      let boundary: number
-      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-        const block = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        const event = parseEvent(block)
-        if (event) onEvent(event)
-      }
-    }
+    await readEvents(response.body, onEvent)
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error
     throw new ApiError("The connection was interrupted.", 0)
-  } finally {
-    reader.releaseLock()
-  }
-}
-
-function parseEvent(block: string): ChatEvent | null {
-  let name = ""
-  const data: string[] = []
-  for (const line of block.split("\n")) {
-    if (line.startsWith("event:")) name = line.slice(6).trim()
-    else if (line.startsWith("data:")) data.push(line.slice(5).trimStart())
-  }
-  if (!name || data.length === 0) return null
-  try {
-    return { event: name, data: JSON.parse(data.join("\n")) } as ChatEvent
-  } catch {
-    return null
   }
 }
 

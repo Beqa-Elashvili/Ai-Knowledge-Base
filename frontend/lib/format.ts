@@ -26,7 +26,7 @@ export function formatBytes(bytes: number): string {
 /** Plain-text preview of a Markdown summary (no **, #, bullets or headings). */
 export function summaryPreview(markdown: string): string {
   return markdown
-    .replace(/\*\*(Key points|Conclusion)\*\*:?/gi, " ")
+    .replace(/\*\*(Key points|Conclusion):?\*\*:?/gi, " ")
     .replace(/[*_`#>]/g, "")
     .replace(/^\s*[-•]\s+/gm, "")
     .replace(/\s+/g, " ")
