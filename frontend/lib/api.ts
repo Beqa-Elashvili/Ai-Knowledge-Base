@@ -139,6 +139,12 @@ export const api = {
     get: (id: string, signal?: AbortSignal) => request<Document>(`/documents/${id}`, { signal }),
     upload: uploadDocument,
     delete: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+    /** Generate (or regenerate) and store the summary; can take a while for long PDFs. */
+    summarize: (id: string, language?: string) =>
+      request<Document>(`/documents/${id}/summary`, json(language ? { language } : {})),
+    /** Generate (or regenerate) and store suggested questions. */
+    generateQuestions: (id: string, language?: string) =>
+      request<Document>(`/documents/${id}/questions`, json(language ? { language } : {})),
   },
 
   conversations: {
