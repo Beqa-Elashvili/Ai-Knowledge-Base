@@ -23,7 +23,7 @@ fakes part of an answer.
 import json
 import logging
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import asdict, dataclass
 
 import anyio
@@ -97,9 +97,16 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
 
-async def open_stream(db: Session, turn: ChatTurn) -> AsyncIterator[str]:
+class ClientGoneError(Exception):
+    """The client disconnected before the answer started (e.g. Stop while thinking)."""
+
+
+async def open_stream(
+    db: Session, turn: ChatTurn, is_disconnected: Callable[[], Awaitable[bool]] | None = None
+) -> AsyncIterator[str]:
     """Start answering. Raises LLMError (502) if the model fails before its
-    first text; nothing is saved in that case."""
+    first text, or ClientGoneError if the client left while waiting for it;
+    nothing is saved in either case."""
     deltas = stream_generate(SYSTEM_PROMPT, turn.messages)
     try:
         first = await anext(deltas)
@@ -108,6 +115,11 @@ async def open_stream(db: Session, turn: ChatTurn) -> AsyncIterator[str]:
     except BaseException:
         await deltas.aclose()
         raise
+
+    if is_disconnected is not None and await is_disconnected():
+        await deltas.aclose()
+        logger.info("Client left before the answer started; nothing saved document=%s", turn.document.id)
+        raise ClientGoneError()
 
     try:
         conversation_id, user_message_id = await anyio.to_thread.run_sync(

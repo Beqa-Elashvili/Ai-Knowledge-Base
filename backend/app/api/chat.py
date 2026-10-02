@@ -1,8 +1,8 @@
 """Chat endpoint: RAG answers streamed as Server-Sent Events."""
 
 import anyio
-from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from starlette.types import Send
 
@@ -42,17 +42,21 @@ class EventStreamResponse(StreamingResponse):
     },
 )
 async def chat(
+    request: Request,
     body: ChatRequest,
     user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> EventStreamResponse:
+) -> Response:
     """Ask a question about a document and receive the answer as it is
     generated. Omit `conversation_id` to start a new conversation; its id
     arrives in the first (`meta`) event."""
     turn = await anyio.to_thread.run_sync(
         chat_service.prepare_turn, db, user.id, body.document_id, body.conversation_id, body.message
     )
-    events = await chat_service.open_stream(db, turn)
+    try:
+        events = await chat_service.open_stream(db, turn, request.is_disconnected)
+    except chat_service.ClientGoneError:
+        return Response(status_code=499)  # client closed the request; nobody reads this
     return EventStreamResponse(
         events,
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},  # no proxy buffering

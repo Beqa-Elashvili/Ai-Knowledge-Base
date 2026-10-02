@@ -260,3 +260,17 @@ def test_chat_endpoint_model_failure_before_streaming_is_502(client, monkeypatch
 def test_chat_endpoint_validates_input(client, monkeypatch, body) -> None:
     monkeypatch.setattr(chat, "prepare_turn", lambda *a: pytest.fail("must not run"))
     assert client.post("/chat", json=body).status_code == 422
+
+
+def test_client_gone_before_first_token_saves_nothing(monkeypatch, store) -> None:
+    """Stop pressed while 'Thinking': the frontend gives the question back,
+    so the backend must not save it either."""
+    state = fake_llm(monkeypatch, ["Too ", "late"])
+
+    async def gone() -> bool:
+        return True
+
+    with pytest.raises(chat.ClientGoneError):
+        asyncio.run(chat.open_stream(None, make_turn(), gone))
+    assert store == {"turns": [], "answers": []}
+    assert state["closed"], "LLM stream must be closed"
